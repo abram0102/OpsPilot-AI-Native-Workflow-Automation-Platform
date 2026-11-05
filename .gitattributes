@@ -1,0 +1,13 @@
+# Normalize line endings on checkin; checkout as LF everywhere (incl. Windows).
+* text=auto eol=lf
+
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Keep Windows batch files CRLF if they're ever added.
+*.bat text eol=crlf
