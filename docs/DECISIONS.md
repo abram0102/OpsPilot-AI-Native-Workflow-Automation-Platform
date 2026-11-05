@@ -28,4 +28,16 @@ Status: **Accepted, pending owner decision**. `AGENTS.md`/T00 only calls for a L
 
 Status: **Accepted**, 2026-11-05. `docs/TASKS.md` T01 says to "create bootstrap SQL only for extensions if required." The `pgvector/pgvector:pg16` image ships the extension's shared library already available to any database on that instance, and `CREATE EXTENSION vector` does not need `shared_preload_libraries` or a superuser-only init step beyond what a normal migration role can run. So `infra/docker-compose.yml` mounts no `docker-entrypoint-initdb.d` scripts; the extension is created exactly once, by the Flyway `V001__extensions_and_core.sql` migration in T06, matching `docs/DATA_MODEL.md`'s migration sequence and avoiding two different places that could both try to create the same extension. Tradeoff: a developer who only runs `make infra-up` without ever starting `services/api` (and therefore never running Flyway) will see pgvector reported as "not created yet" by `scripts/check-infra.sh` — this is expected and documented in the script's own output, not a bug.
 
+## ADR-008 — Spring Boot 4.1.2, and its restructured autoconfiguration packages
+
+Status: **Accepted**, 2026-11-05. `docs/DEPENDENCY_DECISIONS.md`'s baseline target was "Spring Boot stable compatible with Java 21" without a pinned version; verifying against Spring Initializr's live metadata (AGENTS.md rule 4) at T02 time found Spring Boot 4.1.2 as the current stable GA release (4.2.0 is still milestone/RC only). This is a major-version jump past what either the blueprint author or this assistant had prior knowledge of, and it moved many autoconfiguration classes out of `org.springframework.boot.autoconfigure.*` into per-module packages, e.g.:
+
+- `org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration` → `org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration`
+- `org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration` → `org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration`
+- `org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration` → `org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration`
+- `org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest`/`AutoConfigureMockMvc` → `org.springframework.boot.webmvc.test.autoconfigure.*`
+- `org.springframework.boot.test.web.client.TestRestTemplate` → `org.springframework.boot.resttestclient.TestRestTemplate` (and needs an explicit `@AutoConfigureTestRestTemplate`, plus a `spring-boot-restclient` dependency this project doesn't currently have — see `docs/DEPENDENCY_DECISIONS.md` T02 notes; T02's one security integration test uses MockMvc instead, which needed no extra dependency).
+
+**Action for future tickets:** do not copy Spring Boot 2.x/3.x class names, annotation package paths, or Stack Overflow snippets from memory — verify the actual class in the resolved `~/.m2` jar (or current official docs) before using it, exactly as AGENTS.md rule 4 already requires for dependency *versions*. This caught real compile/runtime errors during T02 and will keep doing so for T06+.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

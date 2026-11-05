@@ -1,0 +1,22 @@
+# Local development profile (active by default — see application.yml).
+# Values come from the repository root `.env` (see `.env.example`), which
+# `make api-dev` (T05+) loads before starting this service. No secrets are
+# hardcoded here; POSTGRES_PASSWORD has no default and fails fast if unset.
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:opspilot}
+    username: ${POSTGRES_USER:opspilot}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns all schema (docs/DATA_MODEL.md, AGENTS.md rule 4). Never
+      # "update" here, even in local dev.
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.opspilot: DEBUG
