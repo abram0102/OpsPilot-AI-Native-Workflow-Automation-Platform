@@ -11,7 +11,7 @@ OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads co
 | Planning docs (this repo's `docs/`) | ✅ Committed |
 | `apps/web` (Next.js) | ⬜ Not started (T04) |
 | `services/api` (Spring Boot) | 🟡 Skeleton written, 10/10 Docker-independent tests pass — full run needs a live Postgres (T02, Gate H0) |
-| `services/agent` (Python / LangGraph) | ⬜ Not started (T03) |
+| `services/agent` (Python / LangGraph) | ✅ Skeleton done — 10/10 tests pass, health verified over real HTTP (T03) |
 | Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified — Docker not installed in dev environment (T01, Gate H0) |
 | CI | ⬜ Not started (T05) |
 | Auth0 login | ⬜ Not started (T08) |
