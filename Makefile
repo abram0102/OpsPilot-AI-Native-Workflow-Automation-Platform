@@ -24,21 +24,41 @@ help: ## Show this help
 	@echo ""
 	@echo "Most targets are stubs until their ticket in docs/TASKS.md lands (see docs/PROGRESS.md)."
 
-infra-up: ## Start local Postgres+pgvector and Redis (Docker) — T01
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T01 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 
-infra-down: ## Stop local infra — T01
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T01 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+.PHONY: _ensure-env _ensure-docker
 
-infra-logs: ## Tail local infra logs — T01
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T01 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+_ensure-env:
+	@if [ ! -f .env ]; then \
+		echo "No .env found — creating one from .env.example (local-only placeholders)."; \
+		cp .env.example .env; \
+	fi
 
-infra-reset: ## Destroy local infra volumes, interactive confirm required — T01
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T01 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+_ensure-docker:
+	@command -v docker >/dev/null 2>&1 || { \
+		echo "✗ docker is not installed or not on PATH. See docs/MANUAL_SETUP.md Gate H0 (install Docker Desktop)." >&2; \
+		exit 1; \
+	}
+
+infra-up: _ensure-docker _ensure-env ## Start local Postgres+pgvector and Redis (Docker) — T01
+	$(COMPOSE) up -d
+	@echo "Waiting for health checks..."
+	@bash scripts/check-infra.sh
+
+infra-down: _ensure-docker _ensure-env ## Stop local infra, volumes are kept — T01
+	$(COMPOSE) down
+
+infra-logs: _ensure-docker _ensure-env ## Tail local infra logs — T01
+	$(COMPOSE) logs -f
+
+infra-reset: _ensure-docker _ensure-env ## Destroy local infra containers AND volumes — T01 (interactive confirm)
+	@echo "⚠️  This will PERMANENTLY DELETE local Postgres and Redis data (opspilot-postgres-data, opspilot-redis-data)."
+	@read -p "Type 'reset' to confirm, anything else aborts: " confirm; \
+	if [ "$$confirm" != "reset" ]; then \
+		echo "Aborted — no changes made."; \
+		exit 1; \
+	fi
+	$(COMPOSE) down -v
 
 api-dev: ## Run the Spring Boot API in dev mode — T02
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T02 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2

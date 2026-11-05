@@ -12,7 +12,7 @@ OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads co
 | `apps/web` (Next.js) | ⬜ Not started (T04) |
 | `services/api` (Spring Boot) | ⬜ Not started (T02) |
 | `services/agent` (Python / LangGraph) | ⬜ Not started (T03) |
-| Local infra (`infra/docker-compose.yml`) | ⬜ Not started (T01) |
+| Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified — Docker not installed in dev environment (T01, Gate H0) |
 | CI | ⬜ Not started (T05) |
 | Auth0 login | ⬜ Not started (T08) |
 | Agent runs, approvals, RAG | ⬜ Not started (T15–T26) |

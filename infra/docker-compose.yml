@@ -1,0 +1,60 @@
+# Local development infrastructure only. See docs/TASKS.md T01.
+#
+# Flyway (services/api) owns all application schema, including `CREATE
+# EXTENSION vector` in its V001 migration (docs/DATA_MODEL.md) — this file
+# intentionally does no schema bootstrapping of its own (see docs/DECISIONS.md
+# ADR-007). Postgres and Redis are bound to 127.0.0.1 only; nothing here is
+# reachable from outside the host. Run via `make infra-up` / `make
+# infra-down` / `make infra-logs` / `make infra-reset`, never `docker compose`
+# directly, so the required `.env` is always loaded consistently.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: opspilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opspilot}
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env, see .env.example}"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - opspilot-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opspilot} -d ${POSTGRES_DB:-opspilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - opspilot-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: opspilot-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - opspilot-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - opspilot-net
+
+volumes:
+  opspilot-postgres-data:
+    name: opspilot-postgres-data
+  opspilot-redis-data:
+    name: opspilot-redis-data
+
+networks:
+  opspilot-net:
+    name: opspilot-net
+    driver: bridge
