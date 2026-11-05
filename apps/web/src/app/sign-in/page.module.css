@@ -1,0 +1,28 @@
+.wrapper {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.notice {
+  border: 1px solid var(--warning);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notice p {
+  line-height: 1.5;
+}
+
+.back {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+  color: var(--accent);
+}

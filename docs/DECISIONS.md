@@ -40,4 +40,16 @@ Status: **Accepted**, 2026-11-05. `docs/DEPENDENCY_DECISIONS.md`'s baseline targ
 
 **Action for future tickets:** do not copy Spring Boot 2.x/3.x class names, annotation package paths, or Stack Overflow snippets from memory — verify the actual class in the resolved `~/.m2` jar (or current official docs) before using it, exactly as AGENTS.md rule 4 already requires for dependency *versions*. This caught real compile/runtime errors during T02 and will keep doing so for T06+.
 
+## ADR-009 — Next.js 16 Cache Components, and verifying against its own bundled docs
+
+Status: **Accepted**, 2026-11-05. `create-next-app@16.4.5` (the current stable, verified against npm's registry, not assumed from memory) scaffolds new apps with `cacheComponents: true` and `partialPrefetching: true` by default — a materially different rendering model (Partial Prerendering, `"use cache"`, the `instant` route segment config) from pre-16 Next.js. `next dev` itself auto-generates `apps/web/AGENTS.md` on every run, explicitly warning that "this version has breaking changes" and pointing at `node_modules/next/dist/docs/` as the authoritative reference — not a training-data assumption. That generated file is committed on purpose (it's idempotent and harmless) rather than fought.
+
+This was not theoretical: the dev overlay's "Instant navigation" validator flagged both `app/[orgId]/dashboard/page.tsx` and `app/[orgId]/layout.tsx` for reading the dynamic `orgId` param outside a `<Suspense>` boundary. Fixed by (a) deferring the `params` read into a child `<Suspense>`-wrapped component in the dashboard page, matching the documented "maximizing the static shell" pattern, and (b) setting `export const instant = false` on the org layout, since its nav/toolbar genuinely depend on `orgId` end to end and will be rebuilt around real session data in T08/T09 anyway — an honest acknowledgment rather than a forced, premature optimization.
+
+**Action for future tickets (T08–T12, T22, T27):** before writing data-fetching, auth-cookie, or polling code in `apps/web`, read the relevant guide under `node_modules/next/dist/docs/01-app/`, the same way ADR-008 requires verifying Spring Boot 4 classes against the actual resolved jars.
+
+## ADR-010 — Node 26 (current active LTS) for `apps/web`, not whatever `nvm`'s local alias cache said
+
+Status: **Accepted**, 2026-11-05. The dev machine's active Node via `nvm` was v20.20.2, which satisfies Next.js 16's stated `engines.node: >=20.9.0`. However, `pnpm test` crashed under it: a transitively-pulled `undici@8.x` (via Vite 8/Vitest 5) throws `TypeError: Cannot read properties of undefined (reading 'bind')` in its decompression interceptor, incompatible with the `undici@6.24.1` Node 20.20.2 bundles internally. Installed the actual current active LTS via `nvm install --lts` (resolved to v26.13.0 — `nvm`'s own local alias metadata for "lts/krypton" was stale/out of date) and pinned it in `apps/web/.nvmrc`. Did **not** change the machine's global `nvm alias default` (still 20) — that's the user's own environment choice outside this project's scope; every command in this ticket explicitly ran `nvm use` first. Record the exact Node version actually used in CI once T05 is implemented.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

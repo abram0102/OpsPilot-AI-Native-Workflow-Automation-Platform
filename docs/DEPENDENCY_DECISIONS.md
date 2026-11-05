@@ -23,6 +23,15 @@ No ecosystem dependencies were installed in T00 (no Java/Node/Python project man
 - Project scaffolded from the official Spring Initializr (`https://start.spring.io`) with dependencies `web, validation, security, oauth2-resource-server, data-jpa, postgresql, flyway, actuator, testcontainers`, then hand-edited (removed empty `<url>`/`<licenses>`/`<developers>`/`<scm>` placeholder blocks).
 - **Spring Boot 4 restructured many autoconfiguration/test-support classes into per-module packages** (see `docs/DECISIONS.md` ADR-008) — e.g. `org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration`, `org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration`, `org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration`, `org.springframework.boot.webmvc.test.autoconfigure.{WebMvcTest,AutoConfigureMockMvc}`. `org.springframework.boot.resttestclient.TestRestTemplate` additionally requires a `spring-boot-restclient`/`RestTemplateBuilder` dependency this project doesn't currently declare; T02's security test uses MockMvc instead, which needs no such extra dependency. Revisit if a future ticket specifically wants `TestRestTemplate` over real HTTP.
 
+## T04 notes — 2026-11-05
+
+- **Node 26.13.0** — the current active LTS (`nvm install --lts`), pinned in `apps/web/.nvmrc`. Node 20.20.2 (the machine's prior `nvm` default) satisfies Next.js 16's documented `>=20.9.0` floor but crashes `pnpm test` with an `undici` incompatibility — see `docs/DECISIONS.md` ADR-010. The machine's global `nvm` default was left untouched; always run `nvm use` in `apps/web` first.
+- **pnpm 12.16.1**, activated via Corepack (`corepack enable && corepack prepare pnpm@12.16.1 --activate`) rather than a separate global install.
+- **Next.js 16.4.5**, **React 19.3.0** / **React DOM 19.3.0**, **TypeScript 5.9.3** — scaffolded via the official `create-next-app@16.4.5` (verified as the current stable via `npm view next@latest version`, not assumed), App Router, `src/` layout, ESLint, no Tailwind (not requested by the blueprint; CSS Modules used instead).
+- Test/format tooling added on top of the scaffold: `vitest@5.1.0`, `@vitejs/plugin-react@6.2.1`, `@testing-library/react@16.3.3` + `@testing-library/jest-dom@7.0.1`, `jsdom@31.0.0`, `prettier@3.9.10`, `eslint-config-prettier@10.1.8`. Full pinned graph is in `apps/web/pnpm-lock.yaml`, committed.
+- `package.json` sets `"type": "module"` to match the ESM config files (`vitest.config.ts`, `eslint.config.mjs`) and silence a Vite config-loader warning.
+- **Next.js 16 ships Cache Components by default** — see `docs/DECISIONS.md` ADR-009 for what that changed about how `apps/web/src/app/app/[orgId]/dashboard/page.tsx` and its layout are written.
+
 ## T03 notes — 2026-11-05
 
 - **Python 3.12.8** (`/usr/local/bin/python3.12`), matching the blueprint's "Python 3.12" baseline exactly. `pyproject.toml` pins `requires-python = ">=3.12,<3.13"`; `uv.lock` records `requires-python = "==3.12.*"`.
