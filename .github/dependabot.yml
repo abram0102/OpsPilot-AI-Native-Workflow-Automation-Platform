@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /services/api
+    schedule:
+      interval: weekly
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+
+  - package-ecosystem: uv
+    directory: /services/agent
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+
+  - package-ecosystem: docker
+    directory: /services/agent
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

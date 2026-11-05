@@ -1,6 +1,6 @@
 # OpsPilot
 
-**AI-native customer support operations platform — planning baseline only. No application code exists yet.**
+**AI-native customer support operations platform — early skeleton. Core services and CI exist; there is no real business logic, auth, or AI yet.**
 
 OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads company knowledge, and runs an AI agent that classifies tickets, retrieves tenant-scoped knowledge (RAG), proposes a reply with citations, and requires human approval before anything is published. See `docs/PRODUCT_AND_ARCHITECTURE.md` for the full product and architecture spec.
 
@@ -13,7 +13,7 @@ OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads co
 | `services/api` (Spring Boot) | 🟡 Skeleton written, 10/10 Docker-independent tests pass — full run needs a live Postgres (T02, Gate H0) |
 | `services/agent` (Python / LangGraph) | ✅ Skeleton done — 10/10 tests pass, health verified over real HTTP (T03) |
 | Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified — Docker not installed in dev environment (T01, Gate H0) |
-| CI | ⬜ Not started (T05) |
+| CI (`.github/workflows/ci.yml`) | 🟡 Written and offline-validated (`actionlint` clean); not yet run on GitHub (T05) |
 | Auth0 login | ⬜ Not started (T08) |
 | Agent runs, approvals, RAG | ⬜ Not started (T15–T26) |
 | Staging / AWS deployment | ⬜ Not started (T31–T33) |
@@ -24,15 +24,20 @@ This table is updated honestly as each ticket in `docs/TASKS.md` actually passes
 
 This is a specification-driven build: every planning document in `docs/` was written before any implementation, and `AGENTS.md` sets mandatory engineering rules (tenant isolation, human approval before risky AI actions, no fabricated test results, no committed secrets) that every future ticket must follow. Implementation proceeds one ticket at a time from `docs/TASKS.md` (T00 through T36); each ticket stops for human review before the next begins.
 
-## Getting started (once services exist)
+## Getting started
 
 ```bash
 cp .env.example .env   # fill in local-only placeholder values; never commit .env
 make help               # list available targets
 make infra-up           # start local Postgres+pgvector and Redis (Docker required)
+make lint                # eslint + ruff + spotless, across all three services
+make test-unit           # fast, Docker-independent unit tests across all three services
+make api-dev              # services/api on :8080 (needs infra-up first)
+make agent-dev            # services/agent on :8000
+make web-dev               # apps/web on :3000
 ```
 
-Until the corresponding ticket lands, `make` targets for services that don't exist yet will fail with a clear message pointing at the ticket that implements them — they will not silently no-op or pretend to succeed.
+Until the corresponding ticket lands, `make` targets for services or checks that don't exist yet will fail with a clear message pointing at the ticket that implements them — they will not silently no-op or pretend to succeed.
 
 ## Repository layout
 

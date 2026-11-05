@@ -4,18 +4,26 @@ SHELL := /bin/bash
 # -----------------------------------------------------------------------------
 # OpsPilot Makefile
 #
-# As of ticket T00, only `help` does real work. Every other target below is a
-# deliberate, clearly-labeled stub that FAILS (non-zero exit, explicit message)
-# until the ticket that implements it lands — per AGENTS.md: "Configure
-# scripts to fail with clear messages for not-yet-created services rather
-# than silently passing." Do not let CI or a developer mistake a stub for a
-# passing check.
+# Targets are wired up as the ticket that needs them lands (see
+# docs/PROGRESS.md for current status). Anything not yet implemented is a
+# deliberate, clearly-labeled stub that FAILS (non-zero exit, explicit
+# message) rather than silently no-op'ing or faking success — per AGENTS.md:
+# "Configure scripts to fail with clear messages for not-yet-created services
+# rather than silently passing." Do not let CI or a developer mistake a stub
+# for a passing check.
 # -----------------------------------------------------------------------------
 
 .PHONY: help infra-up infra-down infra-logs infra-reset \
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e test-security \
 	eval-mock eval-real check seed-demo
+
+# Best-effort: switch to the Node version pinned in apps/web/.nvmrc if nvm is
+# installed, so `pnpm test` doesn't hit the undici/Node ABI mismatch recorded
+# in docs/DECISIONS.md ADR-010. Silently does nothing if nvm isn't installed
+# (e.g. CI, which pins Node via actions/setup-node instead) — never fails the
+# command that follows it.
+NVM_USE := if [ -s "$$HOME/.nvm/nvm.sh" ]; then . "$$HOME/.nvm/nvm.sh" && nvm use >/dev/null; fi;
 
 help: ## Show this help
 	@echo "OpsPilot — available targets:"
@@ -60,29 +68,27 @@ infra-reset: _ensure-docker _ensure-env ## Destroy local infra containers AND vo
 	fi
 	$(COMPOSE) down -v
 
-api-dev: ## Run the Spring Boot API in dev mode — T02
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T02 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+api-dev: ## Run the Spring Boot API in dev mode (needs `make infra-up` first) — T02
+	cd services/api && ./mvnw spring-boot:run
 
 agent-dev: ## Run the Python AI worker in dev mode — T03
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T03 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+	cd services/agent && uv run uvicorn opspilot_agent.main:app --reload --port $${AGENT_HEALTH_PORT:-8000}
 
 web-dev: ## Run the Next.js frontend in dev mode — T04
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T04 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+	cd apps/web && $(NVM_USE) pnpm dev
 
-lint: ## Run all linters across web/api/agent — T02-T04
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (tickets T02-T04 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+lint: ## Run all linters across web/api/agent — T05
+	cd apps/web && $(NVM_USE) pnpm lint
+	cd services/agent && uv run ruff check .
+	cd services/api && ./mvnw -q spotless:check
 
-test-unit: ## Run unit tests across services — T02-T04
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (tickets T02-T04 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+test-unit: ## Run fast, Docker-independent unit tests across services — T05
+	cd apps/web && $(NVM_USE) pnpm test
+	cd services/agent && uv run pytest
+	cd services/api && ./mvnw -q test -Dtest='!ApiApplicationTests'
 
-test-integration: ## Run Testcontainers integration tests — T06+
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T06 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+test-integration: _ensure-docker ## Run Testcontainers integration tests (needs Docker) — T05+
+	cd services/api && ./mvnw -q test -Dtest=ApiApplicationTests
 
 test-contract: ## Verify generated OpenAPI/TS client has no drift — T11
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T11 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2

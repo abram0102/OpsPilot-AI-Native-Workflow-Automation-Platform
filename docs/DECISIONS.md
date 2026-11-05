@@ -52,4 +52,16 @@ This was not theoretical: the dev overlay's "Instant navigation" validator flagg
 
 Status: **Accepted**, 2026-11-05. The dev machine's active Node via `nvm` was v20.20.2, which satisfies Next.js 16's stated `engines.node: >=20.9.0`. However, `pnpm test` crashed under it: a transitively-pulled `undici@8.x` (via Vite 8/Vitest 5) throws `TypeError: Cannot read properties of undefined (reading 'bind')` in its decompression interceptor, incompatible with the `undici@6.24.1` Node 20.20.2 bundles internally. Installed the actual current active LTS via `nvm install --lts` (resolved to v26.13.0 — `nvm`'s own local alias metadata for "lts/krypton" was stale/out of date) and pinned it in `apps/web/.nvmrc`. Did **not** change the machine's global `nvm alias default` (still 20) — that's the user's own environment choice outside this project's scope; every command in this ticket explicitly ran `nvm use` first. Record the exact Node version actually used in CI once T05 is implemented.
 
+## ADR-011 — CI: GitHub Actions pinned by commit SHA; Dependabot over Renovate; gitleaks as a personal-account repo
+
+Status: **Accepted**, 2026-11-05. Every third-party action in `.github/workflows/ci.yml` is pinned to an exact commit SHA (with the human-readable version as a trailing comment), not a floating tag — `astral-sh/setup-uv`'s own README recommends this, and it matches `docs/SECURITY_AND_TESTING.md`'s supply-chain mitigation ("protected main branch" etc.): a tag can be force-moved to point at different code; a commit SHA cannot. SHAs were resolved from each action's own tag refs (`git ls-remote`), not guessed.
+
+Dependabot (native, config-file-only) was chosen over Renovate because Renovate requires installing a separate GitHub App and authorizing it on the repository — a human/account action outside what a config file alone can set up — while Dependabot needs nothing beyond `.github/dependabot.yml`. `package-ecosystem: uv` is used for `services/agent` (confirmed as a distinct, supported ecosystem from `pip`, not a guess).
+
+`gitleaks/gitleaks-action@v3` requires a paid license (`GITLEAKS_LICENSE` secret) only for repositories owned by a GitHub **organization**; personal-account repos (this one, under `abram0102`) need no license. If this repository is ever transferred to an organization, add that secret or switch to running the open-source `gitleaks` CLI directly.
+
+## ADR-012 — Spotless (google-java-format) added to `services/api` in T05, not T02
+
+Status: **Accepted**, 2026-11-05. `docs/SECURITY_AND_TESTING.md` section 8 (CI acceptance gates) lists "Java compile/lint" as a required PR gate, but T02's ticket text didn't call out a specific linter/formatter — T05 ("Baseline CI and repo quality automation") is the ticket that actually wires up CI gates, so the formatter was added here instead of retrofitted into T02's commit. `spotless-maven-plugin` + `googleJavaFormat` was chosen as the most common, low-configuration choice for a new Spring Boot project; `./mvnw spotless:apply` reformats, `./mvnw spotless:check` (wired into `make lint` and CI) fails the build on drift.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

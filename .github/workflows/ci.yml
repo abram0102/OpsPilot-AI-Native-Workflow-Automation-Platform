@@ -1,0 +1,120 @@
+name: CI
+
+# Baseline PR/push CI (docs/TASKS.md T05). No AWS or LLM secrets are read
+# anywhere in this workflow (AGENTS.md rule 16) — every job runs fully
+# offline / AI_MODE=mock. GITHUB_TOKEN is the only credential used, and only
+# where GitHub requires it (the secret scan's API calls).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only by default (AGENTS.md: least privilege). No job in this
+# workflow needs to write anything, so none elevates this.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history, so gitleaks scans past commits too
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR comments need `pull-requests: write`, which this workflow
+          # deliberately never grants (read-only by default) — the failed
+          # check itself is what blocks merges, so the comment is skipped.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  shell:
+    name: Shell scripts (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: shellcheck
+        run: |
+          shopt -s nullglob
+          scripts=(scripts/*.sh)
+          if [ "${#scripts[@]}" -eq 0 ]; then
+            echo "No shell scripts under scripts/ yet — nothing to check."
+            exit 0
+          fi
+          shellcheck "${scripts[@]}"
+
+  api:
+    name: Java (services/api)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: services/api/pom.xml
+      - name: Format check (Spotless)
+        run: ./mvnw -B -q spotless:check
+      # Full suite, including the Testcontainers-backed ApiApplicationTests —
+      # GitHub-hosted ubuntu runners ship Docker, so this (correctly) runs
+      # here even though it can't run in every local dev environment
+      # (see docs/PROGRESS.md T02).
+      - name: Build and test
+        run: ./mvnw -B test
+
+  agent:
+    name: Python (services/agent)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/agent
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/agent/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Test
+        run: uv run pytest
+        env:
+          AI_MODE: mock # the default anyway — explicit here, matching AGENTS.md rule 16
+
+  web:
+    name: Next.js (apps/web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
