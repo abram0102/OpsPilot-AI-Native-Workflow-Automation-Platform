@@ -25,7 +25,11 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
  * <ul>
  *   <li>the real one, built from {@code app.security.oidc-issuer-uri} (eventually the Auth0 tenant,
  *       T08) — marked {@link Lazy} so an unreachable/placeholder issuer never blocks application
- *       startup, only the decode of an actual token against it;
+ *       startup, only the decode of an actual token against it. {@code @Lazy} on the bean
+ *       definition only defers creation until something asks for it, so every injection point that
+ *       depends on it must ask via {@link ObjectProvider} rather than a plain {@link JwtDecoder}
+ *       parameter — otherwise Spring would still resolve it synchronously while wiring whatever
+ *       bean declared the plain parameter, defeating the laziness;
  *   <li>the test-only one (only present when {@code app.security.allow-test-issuer=true}),
  *       validated against the {@link TestIssuerConfig} key pair.
  * </ul>
@@ -54,13 +58,13 @@ public class JwtDecoderConfig {
   @Bean
   @Primary
   JwtDecoder jwtDecoder(
-      JwtDecoder issuerJwtDecoder,
+      ObjectProvider<JwtDecoder> issuerJwtDecoder,
       ObjectProvider<KeyPair> testIssuerKeyPair,
       @Value("${app.security.oidc-audience}") String audience,
       @Value("${app.security.allow-test-issuer:false}") boolean allowTestIssuer) {
     KeyPair keyPair = allowTestIssuer ? testIssuerKeyPair.getIfAvailable() : null;
     if (keyPair == null) {
-      return issuerJwtDecoder;
+      return issuerJwtDecoder.getObject();
     }
     JwtDecoder testIssuerDecoder = buildTestIssuerDecoder(keyPair, audience);
     return new TestFirstDelegatingJwtDecoder(testIssuerDecoder, issuerJwtDecoder);
@@ -94,11 +98,12 @@ public class JwtDecoderConfig {
    */
   private static final class TestFirstDelegatingJwtDecoder implements JwtDecoder {
     private final JwtDecoder testDecoder;
-    private final JwtDecoder realDecoder;
+    private final ObjectProvider<JwtDecoder> realDecoderProvider;
 
-    TestFirstDelegatingJwtDecoder(JwtDecoder testDecoder, JwtDecoder realDecoder) {
+    TestFirstDelegatingJwtDecoder(
+        JwtDecoder testDecoder, ObjectProvider<JwtDecoder> realDecoderProvider) {
       this.testDecoder = testDecoder;
-      this.realDecoder = realDecoder;
+      this.realDecoderProvider = realDecoderProvider;
     }
 
     @Override
@@ -107,8 +112,13 @@ public class JwtDecoderConfig {
         return testDecoder.decode(token);
       } catch (JwtException testFailure) {
         try {
-          return realDecoder.decode(token);
-        } catch (JwtException realFailure) {
+          // Resolved here, not at bean-wiring time: constructing the real decoder
+          // does a live OIDC discovery call, which must stay deferred until a token
+          // actually falls through to it (RuntimeException covers both the decoder
+          // construction failing, e.g. an unreachable placeholder issuer, and the
+          // decode itself failing).
+          return realDecoderProvider.getObject().decode(token);
+        } catch (RuntimeException realFailure) {
           // Neither decoder accepted the token. In local/test
           // environments the real decoder's failure is almost
           // always just "issuer unreachable" noise (Auth0 isn't
