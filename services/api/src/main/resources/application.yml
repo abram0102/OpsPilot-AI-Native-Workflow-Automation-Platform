@@ -9,6 +9,19 @@ spring:
 server:
   port: ${API_PORT:8080}
 
+# Deliberately NOT spring.security.oauth2.resourceserver.jwt.* — that would
+# let Spring Boot auto-configure its own JwtDecoder bean, which resolves the
+# issuer eagerly at startup and would break every environment without a real
+# Auth0 tenant configured (all of local dev and CI before T08). See
+# JwtDecoderConfig for the hand-built, lazy decoder this project uses instead.
+app:
+  security:
+    oidc-issuer-uri: ${API_OIDC_ISSUER_URI:https://REPLACE-ME.auth0.com/}
+    oidc-audience: ${API_OIDC_AUDIENCE:https://api.opspilot.local}
+    # Default false (safe); local profile turns it on. ProductionSafetyGuard
+    # refuses to start if this is ever true under the "production" profile.
+    allow-test-issuer: ${API_ALLOW_TEST_ISSUER:false}
+
 management:
   endpoints:
     web:

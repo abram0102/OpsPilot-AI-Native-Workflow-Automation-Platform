@@ -1,0 +1,8 @@
+# Activated in real deployments (T31+). Not fully fleshed out yet — real
+# datasource/secrets-manager wiring lands with the actual deployment tickets.
+# What matters now: this profile explicitly pins the test-issuer escape
+# hatch off, as a second line of defense alongside ProductionSafetyGuard's
+# hard startup check (docs/DECISIONS.md, T07).
+app:
+  security:
+    allow-test-issuer: false
