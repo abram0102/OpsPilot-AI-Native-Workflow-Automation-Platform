@@ -64,4 +64,14 @@ Dependabot (native, config-file-only) was chosen over Renovate because Renovate 
 
 Status: **Accepted**, 2026-11-05. `docs/SECURITY_AND_TESTING.md` section 8 (CI acceptance gates) lists "Java compile/lint" as a required PR gate, but T02's ticket text didn't call out a specific linter/formatter — T05 ("Baseline CI and repo quality automation") is the ticket that actually wires up CI gates, so the formatter was added here instead of retrofitted into T02's commit. `spotless-maven-plugin` + `googleJavaFormat` was chosen as the most common, low-configuration choice for a new Spring Boot project; `./mvnw spotless:apply` reformats, `./mvnw spotless:check` (wired into `make lint` and CI) fails the build on drift.
 
+## ADR-013 — Plain UUID foreign-key columns in JPA entities, not `@ManyToOne`; composite FKs enforce tenant isolation at the DB level
+
+Status: **Accepted**, 2026-11-05. T06's entities (`Ticket.customerId`, `TicketMessage.ticketId`, `Membership.organizationId`/`userId`, etc.) store foreign keys as plain `UUID` fields rather than Hibernate-managed `@ManyToOne` associations. This keeps every tenant-scoped query explicit (`findByIdAndOrganizationId(...)`, never a bare `findById`) and avoids lazy-loading/N+1 surprises across what will become a large entity graph. It also sidesteps a genuine Hibernate mapping difficulty: the DB's composite foreign keys (e.g. `tickets.(customer_id, organization_id)` → `customers.(id, organization_id)`, added specifically so the database itself rejects a ticket referencing another organization's customer — docs/DATA_MODEL.md section B.2's literal example) don't map cleanly onto a `@ManyToOne` when one of the two FK columns (`organization_id`) is already its own mapped field on the owning entity.
+
+Verified with real tests, not just asserted: `TicketRepositoryIntegrationTest.ticketCannotReferenceACustomerFromAnotherOrganization` inserts a cross-tenant ticket and asserts the DB itself (`DataIntegrityViolationException`), not application code, rejects it.
+
+## ADR-014 — Demo-data seeding is a separate Spring profile/process, not an app-startup side effect
+
+Status: **Accepted**, 2026-11-05. `DemoDataSeeder` (`@Profile("seed")`) only runs when `make seed-demo` activates the `seed` profile alongside `local`; `application-seed.yml` sets `spring.main.web-application-type: none` so the process seeds and exits rather than staying up as a second, confusing instance of the API. This matches `docs/DEPLOYMENT_RUNBOOK.md`'s "`make seed-demo` ... deterministic seed idempotent and local/test only" and keeps seeding out of the normal `api-dev` startup path entirely — nobody is surprised by demo orgs appearing just from running the app normally.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

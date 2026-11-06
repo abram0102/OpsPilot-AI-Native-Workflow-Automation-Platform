@@ -82,13 +82,20 @@ lint: ## Run all linters across web/api/agent — T05
 	cd services/agent && uv run ruff check .
 	cd services/api && ./mvnw -q spotless:check
 
+# Surefire needs `!` on *each* comma-separated name to exclude all of them
+# (a bare name after a comma is a separate positive-include filter, not a
+# continuation of the exclusion) — so these are two distinct strings, not
+# one list reused with/without a prefix.
+API_DOCKER_TESTS_EXCLUDE := !ApiApplicationTests,!FlywayMigrationIntegrationTest,!MembershipRepositoryIntegrationTest,!TicketRepositoryIntegrationTest
+API_DOCKER_TESTS_INCLUDE := ApiApplicationTests,FlywayMigrationIntegrationTest,MembershipRepositoryIntegrationTest,TicketRepositoryIntegrationTest
+
 test-unit: ## Run fast, Docker-independent unit tests across services — T05
 	cd apps/web && $(NVM_USE) pnpm test
 	cd services/agent && uv run pytest
-	cd services/api && ./mvnw -q test -Dtest='!ApiApplicationTests'
+	cd services/api && ./mvnw -q test -Dtest='$(API_DOCKER_TESTS_EXCLUDE)'
 
 test-integration: _ensure-docker ## Run Testcontainers integration tests (needs Docker) — T05+
-	cd services/api && ./mvnw -q test -Dtest=ApiApplicationTests
+	cd services/api && ./mvnw -q test -Dtest=$(API_DOCKER_TESTS_INCLUDE)
 
 test-contract: ## Verify generated OpenAPI/TS client has no drift — T11
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T11 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
@@ -110,9 +117,8 @@ eval-real: ## Run real-provider AI evaluation, requires H2 gate + budget — T20
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T20 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
 	@exit 1
 
-seed-demo: ## Seed fictional local/test tenants, users and tickets — T06+
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T06 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+seed-demo: ## Seed fictional local/test tenants, users and tickets (needs infra-up first) — T06
+	cd services/api && ./mvnw -q spring-boot:run -Dspring-boot.run.profiles=local,seed
 
 check: ## Run static + unit + integration + contract + mock-eval checks — T29
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T29 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2

@@ -1,0 +1,6 @@
+# Activated together with `local` (see `make seed-demo`): `local` supplies
+# the datasource, `seed` runs DemoDataSeeder and then exits — there is no
+# web server to keep the JVM alive once the CommandLineRunner returns.
+spring:
+  main:
+    web-application-type: none

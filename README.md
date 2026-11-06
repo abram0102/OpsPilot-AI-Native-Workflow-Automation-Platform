@@ -10,10 +10,10 @@ OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads co
 |---|---|
 | Planning docs (this repo's `docs/`) | ✅ Committed |
 | `apps/web` (Next.js) | ✅ Skeleton done — lint/typecheck/test/build all pass, verified in a real browser (T04) |
-| `services/api` (Spring Boot) | 🟡 Skeleton written, 10/10 Docker-independent tests pass — full run needs a live Postgres (T02, Gate H0) |
+| `services/api` (Spring Boot) | 🟡 Core schema + entities/repositories done (T06); 10/10 Docker-independent tests pass locally, full suite (incl. schema/tenant-isolation tests) verified in CI |
 | `services/agent` (Python / LangGraph) | ✅ Skeleton done — 10/10 tests pass, health verified over real HTTP (T03) |
-| Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified — Docker not installed in dev environment (T01, Gate H0) |
-| CI (`.github/workflows/ci.yml`) | 🟡 Written and offline-validated (`actionlint` clean); not yet run on GitHub (T05) |
+| Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified locally — Docker not installed in this dev environment (T01, Gate H0); works in CI |
+| CI (`.github/workflows/ci.yml`) | ✅ Verified — [a real GitHub Actions run](https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform/actions) passed all jobs (T05) |
 | Auth0 login | ⬜ Not started (T08) |
 | Agent runs, approvals, RAG | ⬜ Not started (T15–T26) |
 | Staging / AWS deployment | ⬜ Not started (T31–T33) |
