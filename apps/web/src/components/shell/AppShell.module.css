@@ -15,9 +15,24 @@
   background: var(--surface);
 }
 
+.toolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .brand {
   font-weight: 600;
   font-size: 1rem;
+}
+
+.account {
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
 }
 
 .orgBadge {

@@ -31,4 +31,13 @@ public class PrincipalAuthenticationToken extends AbstractAuthenticationToken {
   public Object getCredentials() {
     return jwt;
   }
+
+  /**
+   * The raw validated {@link Jwt}, for the rare caller (e.g. {@code MeController}) that needs a
+   * claim {@link AuthenticatedPrincipal} doesn't carry — never exposed to client input, only ever
+   * read from here.
+   */
+  public Jwt getJwt() {
+    return jwt;
+  }
 }

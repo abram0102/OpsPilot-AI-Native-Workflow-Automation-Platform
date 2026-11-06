@@ -4,6 +4,8 @@ import styles from "./AppShell.module.css";
 
 interface AppShellProps {
   orgId: string;
+  orgName?: string;
+  user?: { displayName: string; email: string };
   children: ReactNode;
 }
 
@@ -14,12 +16,19 @@ interface AppShellProps {
  * Settings T09) are added here as their own tickets land — not as dead
  * links ahead of time.
  */
-export function AppShell({ orgId, children }: AppShellProps) {
+export function AppShell({ orgId, orgName, user, children }: AppShellProps) {
   return (
     <div className={styles.shell}>
       <header className={styles.toolbar}>
-        <span className={styles.brand}>OpsPilot</span>
-        <span className={styles.orgBadge}>Org: {orgId}</span>
+        <div className={styles.toolbarGroup}>
+          <span className={styles.brand}>OpsPilot</span>
+          <span className={styles.orgBadge}>Org: {orgName ?? orgId}</span>
+        </div>
+        {user && (
+          <span className={styles.account}>
+            {user.displayName} <a href="/auth/logout">Sign out</a>
+          </span>
+        )}
       </header>
       <div className={styles.body}>
         <nav className={styles.nav} aria-label="Primary">

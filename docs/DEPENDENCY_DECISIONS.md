@@ -23,6 +23,12 @@ No ecosystem dependencies were installed in T00 (no Java/Node/Python project man
 - Project scaffolded from the official Spring Initializr (`https://start.spring.io`) with dependencies `web, validation, security, oauth2-resource-server, data-jpa, postgresql, flyway, actuator, testcontainers`, then hand-edited (removed empty `<url>`/`<licenses>`/`<developers>`/`<scm>` placeholder blocks).
 - **Spring Boot 4 restructured many autoconfiguration/test-support classes into per-module packages** (see `docs/DECISIONS.md` ADR-008) — e.g. `org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration`, `org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration`, `org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration`, `org.springframework.boot.webmvc.test.autoconfigure.{WebMvcTest,AutoConfigureMockMvc}`. `org.springframework.boot.resttestclient.TestRestTemplate` additionally requires a `spring-boot-restclient`/`RestTemplateBuilder` dependency this project doesn't currently declare; T02's security test uses MockMvc instead, which needs no such extra dependency. Revisit if a future ticket specifically wants `TestRestTemplate` over real HTTP.
 
+## T08 notes — 2026-11-06
+
+- **`@auth0/nextjs-auth0` 4.33.0** (`apps/web/package.json`) — verified current via `npm view @auth0/nextjs-auth0 version`; peer ranges (`next: ^16.0.10`, `react`/`react-dom: ^19.2.1`) satisfied by this project's Next 16.4.5/React 19.3.0. Env var names, mounted route paths (`/auth/*`, not `/api/auth/*`) and the `proxy.ts` vs `middleware.ts` choice were verified against the package's own shipped docs and this project's installed Next.js docs, not assumed — see `docs/DECISIONS.md` ADR-019.
+- No new backend dependency for T08 — `UserProvisioningService` only uses what T07 already pulled in (Spring Security's `Jwt`).
+- Local machine note, not a dependency change: this environment's Node 26.13.0 (via `nvm`) has no bundled Corepack, so `pnpm` wasn't on `PATH` until `npm install -g corepack@latest` was run once — see `docs/DECISIONS.md` ADR-022. GitHub Actions CI is unaffected (its `corepack enable` step already worked in every prior CI run).
+
 ## T07 notes — 2026-11-05
 
 - **Jackson 3.1.7** (`tools.jackson.core:jackson-databind`), pulled in transitively via `spring-boot-starter-jackson` — not the `com.fasterxml.jackson.core:jackson-databind` 2.x most prior knowledge assumes. See `docs/DECISIONS.md` ADR-016.

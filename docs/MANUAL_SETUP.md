@@ -11,12 +11,28 @@ Most coding work can be automated. These steps require personal account control,
 
 ## Gate H1 — Auth0 (before real login T08/T10 E2E)
 
-1. Create/authenticate an Auth0 account. Create a development tenant and an application appropriate for a Next.js web app. Create an API resource with a unique audience for Spring Boot access tokens.
-2. Configure exact local callback/logout URLs recommended by the **currently installed** SDK, such as `http://localhost:3000/...` (do not blindly paste outdated callback paths).
-3. Use SDK's verified configuration to configure domain/issuer, client ID/secret, audience, session secret and API allowed origins. Store locally in `.env` and production secrets manager.
-4. Configure a dedicated test account and later a second account; avoid public real data.
-5. To enable E2E without live Auth0, use a **test-only signed OIDC issuer / token fixture** restricted to test builds, not a dev bypass exposed on production routes.
-6. User confirms login works; Codex implements integration and tests.
+1. Create/authenticate an Auth0 account. Create a development tenant and a **Regular Web Application** (not SPA) for `apps/web`. Create an API resource with audience `https://api.opspilot.local` (or whatever you set `API_OIDC_AUDIENCE`/`AUTH0_AUDIENCE` to — they must match exactly) for Spring Boot access tokens.
+2. In the Application's settings, set **Allowed Callback URLs** to `http://localhost:3000/auth/callback` and **Allowed Logout URLs** to `http://localhost:3000` — the `@auth0/nextjs-auth0` v4 SDK actually installed here drops the `/api` prefix v3 docs still show (confirmed from the SDK's own bundled `node_modules/@auth0/nextjs-auth0/skills/SKILL.md`, not assumed from memory).
+3. Set these exact environment variables locally (`.env`) and in the production secrets manager later — v4's names, not v3's (see `docs/DECISIONS.md`):
+   ```
+   AUTH0_DOMAIN=your-tenant.auth0.com   # no scheme
+   AUTH0_CLIENT_ID=...
+   AUTH0_CLIENT_SECRET=...
+   AUTH0_AUDIENCE=https://api.opspilot.local
+   AUTH0_SECRET=$(openssl rand -hex 32)
+   APP_BASE_URL=http://localhost:3000
+   ```
+4. **Add a Post-Login Action** so the access token Spring Boot actually validates carries a verified email/name — by default Auth0 only puts those on the ID token, which never leaves the Next.js BFF. In the Auth0 Dashboard, add a Post-Login Action (Actions → Flows → Login) with:
+   ```js
+   exports.onExecutePostLogin = async (event, api) => {
+     api.accessToken.setCustomClaim("https://opspilot.local/email", event.user.email);
+     api.accessToken.setCustomClaim("https://opspilot.local/name", event.user.name);
+   };
+   ```
+   Without this, first-login provisioning (`UserProvisioningService`) still works but falls back to a synthetic `sub@users.opspilot.local` placeholder rather than the real email — functional, not fake, but not what you want for a real demo account.
+5. Configure a dedicated test account and later a second account; avoid public real data.
+6. To enable E2E without live Auth0, use a **test-only signed OIDC issuer / token fixture** restricted to test builds, not a dev bypass exposed on production routes — already built in T07/T08 (`TestIssuerConfig`, `TestJwtSigner`), gated by `API_ALLOW_TEST_ISSUER` and refused outright under the `production` profile (`ProductionSafetyGuard`).
+7. User confirms login works; Codex implements integration and tests.
 
 ## Gate H2 — LLM provider (before real AI T20)
 

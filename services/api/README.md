@@ -1,6 +1,6 @@
 # services/api
 
-Spring Boot 4.1.2 / Java 21 backend. **T02** laid the skeleton. **T06** added the core schema and tenant-scoped repositories. **T07** added real OIDC JWT validation (signature/issuer/audience/expiry) and the server-side authorization policy — every path except the two health probes now requires a valid JWT, and every organization-scoped action goes through `OrganizationAccessService`, never a client-supplied role. No REST endpoints exist yet — those start at **T09** (orgs) and **T10** (tickets).
+Spring Boot 4.1.2 / Java 21 backend. **T02** laid the skeleton. **T06** added the core schema and tenant-scoped repositories. **T07** added real OIDC JWT validation (signature/issuer/audience/expiry) and the server-side authorization policy — every path except the two health probes now requires a valid JWT, and every organization-scoped action goes through `OrganizationAccessService`, never a client-supplied role. **T08** added the first real endpoint, `GET /api/v1/me`, which also provisions a brand-new user's row on their first trusted login. Org CRUD/invitations and tickets start at **T09** and **T10**.
 
 ## Running locally
 
@@ -25,7 +25,7 @@ Creates two fictional tenants ("Acme Demo" / "Globex Demo"), each with one owner
 - `com.opspilot.common.web` — `RequestIdFilter`, `RequestIdSupport`, `ApiErrorResponse`, `GlobalExceptionHandler` (the stable error envelope from `docs/API_CONTRACT.md`).
 - `com.opspilot.common.security` — `SecurityConfig` (JWT required everywhere but health), `JwtDecoderConfig` (real + test-issuer decoders), `TestIssuerConfig`, `ProductionSafetyGuard`, `AudienceValidator`, `JsonAuthenticationEntryPoint`/`JsonAccessDeniedHandler` (401/403 on the standard error envelope).
 - `com.opspilot.common.seed` — `DemoDataSeeder` (`seed` profile only).
-- `com.opspilot.auth` — `User`, `AuthenticatedPrincipal`, `OrganizationAccessService` (+ impl), `OrganizationAction` (the role/action permission matrix), `PrincipalResolvingJwtAuthenticationConverter`, `PrincipalAuthenticationToken`.
+- `com.opspilot.auth` — `User`, `AuthenticatedPrincipal`, `OrganizationAccessService` (+ impl), `OrganizationAction` (the role/action permission matrix), `PrincipalResolvingJwtAuthenticationConverter`, `PrincipalAuthenticationToken`, `UserProvisioningService` (+ impl — first-login provisioning, docs/DECISIONS.md ADR-020), `MeController` (`GET /api/v1/me`).
 - `com.opspilot.organization` — `Organization`, `Membership` (+ `MembershipRole`), `Invitation`.
 - `com.opspilot.ticket` — `Customer`, `Ticket` (+ `TicketStatus`/`TicketPriority`), `TicketMessage` (+ `TicketMessageAuthorType`), `TicketTag`.
 - Every tenant-scoped repository method takes an `organizationId` explicitly (e.g. `findByIdAndOrganizationId`) — there is no bare `findById` path to another tenant's row sitting around waiting to be misused.
@@ -43,7 +43,7 @@ Every organization-scoped action is declared once in `OrganizationAction` with i
 
 ```bash
 ./mvnw test                                   # full suite — needs Docker (Testcontainers Postgres)
-./mvnw test -Dtest='!ApiApplicationTests,!FlywayMigrationIntegrationTest,!MembershipRepositoryIntegrationTest,!TicketRepositoryIntegrationTest,!SecurityConfigIntegrationTest,!JwtAuthenticationIntegrationTest,!OrganizationAccessHttpIntegrationTest'   # everything else, no Docker required
+./mvnw test -Dtest='!ApiApplicationTests,!FlywayMigrationIntegrationTest,!MembershipRepositoryIntegrationTest,!TicketRepositoryIntegrationTest,!SecurityConfigIntegrationTest,!JwtAuthenticationIntegrationTest,!OrganizationAccessHttpIntegrationTest,!MeControllerIntegrationTest'   # everything else, no Docker required
 ```
 
-7 of the test classes boot a real Postgres via Testcontainers and therefore need Docker (as of T07, `SecurityConfig` itself depends on `UserRepository`, so even pure JWT-rejection tests need a real datasource) — see `docs/PROGRESS.md` for current local-environment status. GitHub Actions CI (`.github/workflows/ci.yml`) runs the full suite, Docker included.
+8 of the test classes boot a real Postgres via Testcontainers and therefore need Docker (as of T07, `SecurityConfig` itself depends on `UserRepository`, so even pure JWT-rejection tests need a real datasource) — see `docs/PROGRESS.md` for current local-environment status. GitHub Actions CI (`.github/workflows/ci.yml`) runs the full suite, Docker included.

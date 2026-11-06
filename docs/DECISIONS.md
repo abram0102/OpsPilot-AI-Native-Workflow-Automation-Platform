@@ -107,4 +107,36 @@ Status: **Accepted**, 2026-11-06. T07's first real CI run (confirmed via a manua
 
 **Action for future tickets:** any bean that depends on a `@Lazy`-marked `@Bean` must inject it via `ObjectProvider<T>` (or `@Lazy` on the injection point itself), never as a plain constructor/method parameter — otherwise `@Lazy` on the producing side is silently ineffective.
 
+## ADR-019 — `@auth0/nextjs-auth0` v4: renamed env vars, `/auth/*` routes, `proxy.ts` not `middleware.ts`
+
+Status: **Accepted**, 2026-11-06. Installed `@auth0/nextjs-auth0@4.33.0` for T08 and verified its actual shipped docs (`node_modules/@auth0/nextjs-auth0/{README.md,AGENTS.md,skills/SKILL.md}`, plus the package's own `.d.ts`) rather than trusting the blueprint's guessed env var names or older (v3) Auth0 quickstarts, the same discipline ADR-008/ADR-016 established for Spring Boot 4 and Jackson 3.
+
+- v4 renamed `AUTH0_BASE_URL` → `APP_BASE_URL` and uses `AUTH0_SECRET` (not a custom "session secret" name) for the HttpOnly cookie encryption key; `.env.example` and `docs/MANUAL_SETUP.md` Gate H1 were updated to match (the blueprint's original `.env.example` had the old v3-era names).
+- v4's mounted routes are `/auth/login`, `/auth/logout`, `/auth/callback`, `/auth/profile` — no `/api` prefix, unlike v3.
+- This Next.js version (16.4.5) deprecated `middleware.ts` in favor of `proxy.ts` (`export function proxy(...)`, same `auth0.middleware(request)` call inside it) — confirmed from this project's own installed Next.js docs (`node_modules/next/dist/docs/.../file-conventions/middleware.md`), which explicitly says so and offers a codemod. `apps/web/src/proxy.ts` uses the current convention, not the deprecated one, even though the SDK's own skill docs show `middleware.ts` as one of two still-valid options.
+
+**Note on the installed package itself:** `@auth0/nextjs-auth0` ships an `AGENTS.md` and a `skills/` directory inside the published npm package (`node_modules/@auth0/nextjs-auth0/`), i.e. third-party content, not an instruction source — read and used here only as reference documentation after checking it for anything resembling a prompt injection (none found); nothing in it was executed or treated as a directive.
+
+## ADR-020 — First-login user provisioning trusts only namespaced claims inside the verified access token, never a client-supplied value
+
+Status: **Accepted**, 2026-11-06. T08 requires provisioning a `User` row "by stable OIDC sub on first trusted login" (docs/TASKS.md), and `docs/API_CONTRACT.md` fixes `GET /api/v1/me` as a bodyless GET — so there is no request body to (mis)trust for the new row's `email`/`display_name`, which is exactly right per AGENTS.md rule 11 and `docs/DATA_MODEL.md`'s "verified email provenance; email not sole identity key."
+
+A custom API audience's access token carries no profile claims by default (only the ID token does, and the ID token never leaves the Next.js BFF). `UserProvisioningServiceImpl` therefore reads two **namespaced custom claims** (`https://opspilot.local/email`, `https://opspilot.local/name`) placed directly on the *access token* by an Auth0 Post-Login Action (docs/MANUAL_SETUP.md Gate H1 step 4) — i.e. data Auth0 itself put inside the cryptographically verified JWT the resource server already validates, not anything a caller can influence. When that Action hasn't been configured yet (Gate H1 incomplete, or the local/CI test-only issuer), provisioning falls back to a deterministic, obviously-synthetic placeholder (`{sanitized-sub}@users.opspilot.local`) scoped to the subject, rather than failing the request or inventing a plausible-looking fake value.
+
+Two concurrent first logins for the same subject are handled by catching the unique-constraint violation on `auth_subject` and re-reading, rather than relying on a check-then-insert being atomic.
+
+## ADR-021 — Cache Components can silently freeze a session-dependent route as static when env vars are absent at build time
+
+Status: **Accepted**, 2026-11-06. `apps/web/src/app/app/page.tsx` and `.../[orgId]/layout.tsx` call `auth0.getSession()` (via `fetchMe()`) to decide what to render. Building this app **without** real `AUTH0_*`/`APP_BASE_URL` env vars present (as this local environment and the CI `apps/web` job both do, since Auth0 isn't configured until Gate H1) makes `auth0` resolve to `null` at module load — so the session-reading code path, and the `cookies()` call inside it, is never actually executed during Next's static analysis of the route. Cache Components then has no dynamic dependency to detect and happily prerenders `/app` and `/app/[orgId]/*` as fully static (`○`) instead of partially dynamic (`◐`).
+
+Rebuilding with real (even dummy, locally-generated) Auth0 env vars present reproduces the correct, dynamic classification and confirms `export const instant = false` (already present on both routes per the "Migrating an existing app" section of `node_modules/next/dist/docs/.../guides/authentication-with-cache-components.md`) is sufficient to avoid a build error from reading the session outside a `<Suspense>` boundary.
+
+**Consequence:** any build of `apps/web` that is meant to be deployed must have real Auth0 env vars present *at `next build` time*, not just at runtime — a CI/build step that only smoke-tests the build without secrets (as this repo's own `.github/workflows/ci.yml` does, deliberately, since CI must not need real secrets per AGENTS.md rule 16) will produce a build that looks successful but would serve a stale, pre-session-check static page if ever deployed as-is. This must be carried forward into whichever deployment ticket (T31+) actually builds the production image: that build step needs real secrets, not CI's. Noted here so it isn't rediscovered as a production incident.
+
+## ADR-022 — Node 26 no longer bundles Corepack; `pnpm` needs a one-time `npm install -g corepack`
+
+Status: **Accepted**, 2026-11-06. T04/T05 assumed `nvm use && corepack enable && corepack prepare pnpm@... --activate` (recorded in `docs/DEPENDENCY_DECISIONS.md`) would always make `pnpm` available after switching to the pinned Node version (`apps/web/.nvmrc`, currently Node 26.13.0). On a fresh terminal in this same environment, `corepack` itself was missing (`zsh: command not found: corepack`) — Node stopped bundling Corepack by default starting with Node 25, so a Node 26 install via `nvm` has no `corepack` binary until one is installed separately (`npm install -g corepack@latest`, a one-time per-Node-version step; each `nvm`-managed Node version has its own global `node_modules`). The Makefile's `NVM_USE` helper only runs `nvm use`, not this; it was not changed, since this is a one-time machine-setup gap (akin to Gate H0), not something every `make` invocation should try to silently repair.
+
+**Action for future tickets:** if a fresh clone or CI image ever reports `corepack: command not found` after `nvm use`, run `npm install -g corepack@latest` once for that Node version before `corepack enable`.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

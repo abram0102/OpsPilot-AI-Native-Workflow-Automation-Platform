@@ -1,6 +1,6 @@
 # apps/web
 
-Next.js 16 / React 19 / TypeScript frontend. Skeleton implemented in ticket **T04** (`docs/TASKS.md`): responsive shell (left nav + top toolbar), landing page, a sign-in placeholder with an honest "not configured" state (Auth0 lands in T08), root error boundary and loading UI, and `/app/[orgId]/dashboard` showing no fake data. No backend connection, auth, or typed API client yet — those are T08/T11.
+Next.js 16 / React 19 / TypeScript frontend. Skeleton implemented in ticket **T04**; **T08** added the real Auth0 OIDC login/logout flow (`@auth0/nextjs-auth0` v4), the authenticated `/app` organization selector, and session-gated `/app/[orgId]/*` layouts. Still honest about what's missing: with no Auth0 application configured (Gate H1), `/sign-in` shows a "not configured" state rather than a fake login, and org creation (empty-state message on `/app`) is T09's job. No typed API client yet — that's T11; `src/lib/api/me.ts` is a small hand-written client for the one endpoint T08 needs.
 
 ## Requirements
 
@@ -22,15 +22,23 @@ pnpm format       # prettier --write
 ## Structure
 
 ```
+src/proxy.ts              # mounts Auth0's /auth/* routes (Next 16: proxy.ts, not middleware.ts)
+src/lib/auth0.ts           # Auth0Client singleton; null when Gate H1 isn't done yet
+src/lib/api/me.ts          # fetchMe() — calls GET /api/v1/me with the BFF's own access token
 src/app/                  # App Router routes
   page.tsx                # "/" landing page
-  sign-in/                # login placeholder, "not configured" until T08
-  app/[orgId]/layout.tsx  # AppShell wrapper (instant = false — see file comment)
+  sign-in/                # real Auth0 login link, or honest "not configured" state
+  app/page.tsx            # organization selector (T08) — skips straight to dashboard if just one org
+  app/[orgId]/layout.tsx  # session + membership gate, then AppShell (instant = false)
   app/[orgId]/dashboard/  # dashboard placeholder, no fake data
   error.tsx, loading.tsx  # root error boundary / loading UI
-src/components/shell/     # AppShell (left nav + top toolbar)
+src/components/shell/     # AppShell (left nav + top toolbar, signed-in user + sign out)
 src/lib/api/config.ts     # getApiBaseUrl() — reads NEXT_PUBLIC_API_BASE_URL, never hardcoded
 ```
+
+## Auth0 (T08)
+
+Login/logout/callback/profile routes are mounted by the SDK itself via `src/proxy.ts` — there's nothing to route by hand. `fetchMe()` is the one place the BFF calls the Spring API: it reads the session, gets an access token scoped to `AUTH0_AUDIENCE`, and forwards it as a bearer token to `GET /api/v1/me`, which is also where a brand-new user gets provisioned server-side (see `docs/DECISIONS.md` ADR-020). Without Gate H1 done, `auth0` (in `src/lib/auth0.ts`) is `null` and every route that depends on it degrades to the honest "not configured" / redirect-to-`/sign-in` path — never a bypass.
 
 ## Important: this Next.js version has real breaking changes from training data
 

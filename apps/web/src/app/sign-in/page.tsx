@@ -1,26 +1,17 @@
 import Link from "next/link";
+import { isAuth0Configured } from "@/lib/auth0";
 import styles from "./page.module.css";
 
-/**
- * Whether Auth0 looks configured for this environment. The real OIDC login
- * flow is built in ticket T08 (docs/TASKS.md); until then this must show an
- * honest "not configured" state rather than a fake working login form.
- */
-function isAuthConfigured(): boolean {
-  return Boolean(process.env.AUTH0_DOMAIN && process.env.AUTH0_CLIENT_ID);
-}
-
 export default function SignInPage() {
-  const configured = isAuthConfigured();
+  const configured = isAuth0Configured();
 
   return (
     <main id="main-content" tabIndex={-1} className={styles.wrapper}>
       <h1>Sign in</h1>
       {configured ? (
-        <p>
-          Auth0 environment variables are present, but the actual sign-in flow is implemented in
-          ticket T08 — this placeholder does not perform a real login yet.
-        </p>
+        <a className={styles.back} href="/auth/login?returnTo=/app">
+          Continue with Auth0
+        </a>
       ) : (
         <div role="status" className={styles.notice}>
           <p>
@@ -28,8 +19,7 @@ export default function SignInPage() {
           </p>
           <p>
             This environment has no Auth0 domain or client configured. See{" "}
-            <code>docs/MANUAL_SETUP.md</code> (Gate H1) to set one up, and ticket T08 for the real
-            sign-in implementation.
+            <code>docs/MANUAL_SETUP.md</code> (Gate H1) to set one up.
           </p>
         </div>
       )}
