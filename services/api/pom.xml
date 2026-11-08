@@ -49,6 +49,14 @@
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
+		<!-- OpenAPI annotations/spec generation (T10 Build: "add OpenAPI annotations"; the
+		     actual generator command + TS client + CI drift check are T11's job). The v3.x
+		     line tracks Spring Boot 4 / Spring Framework 7 (docs/DEPENDENCY_DECISIONS.md). -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.2.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.postgresql</groupId>

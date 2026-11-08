@@ -10,7 +10,7 @@ OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads co
 |---|---|
 | Planning docs (this repo's `docs/`) | ✅ Committed |
 | `apps/web` (Next.js) | ✅ Skeleton done — lint/typecheck/test/build all pass, verified in a real browser (T04); create-org/member-management/invite-accept forms added (T09), not yet exercised by a real signed-in session (Gate H1) |
-| `services/api` (Spring Boot) | ✅ Core schema (T06), real OIDC JWT auth + authorization policy (T07), `GET /api/v1/me` + first-login provisioning (T08), organization/membership/invitation management (T09); full suite verified in CI — see `docs/PROGRESS.md` for the current test count |
+| `services/api` (Spring Boot) | ✅ Core schema (T06), real OIDC JWT auth + authorization policy (T07), `GET /api/v1/me` + first-login provisioning (T08), organization/membership/invitation management (T09), ticket CRUD + pagination + messages (T10); full suite verified in CI — see `docs/PROGRESS.md` for the current test count |
 | `services/agent` (Python / LangGraph) | ✅ Skeleton done — 10/10 tests pass, health verified over real HTTP (T03) |
 | Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified locally — Docker not installed in this dev environment (T01, Gate H0); works in CI |
 | CI (`.github/workflows/ci.yml`) | ✅ Verified — [a real GitHub Actions run](https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform/actions) passed all jobs (T05) |

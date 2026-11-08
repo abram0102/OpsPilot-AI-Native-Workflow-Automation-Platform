@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -12,6 +13,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * Maps exceptions to the single stable error envelope defined in docs/API_CONTRACT.md. Never
@@ -74,6 +76,38 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiErrorResponse> handleConflict(
       ConflictException ex, HttpServletRequest request) {
     return respond(HttpStatus.CONFLICT, "STATE_CONFLICT", ex.getMessage(), List.of(), request);
+  }
+
+  @ExceptionHandler(BadRequestException.class)
+  public ResponseEntity<ApiErrorResponse> handleBadRequest(
+      BadRequestException ex, HttpServletRequest request) {
+    return respond(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", ex.getMessage(), List.of(), request);
+  }
+
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
+      MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.BAD_REQUEST,
+        "VALIDATION_ERROR",
+        ex.getName() + ": invalid value.",
+        List.of(),
+        request);
+  }
+
+  /**
+   * JPA's {@code @Version} column caught a genuinely concurrent write (defense-in-depth on top of
+   * the explicit client-supplied version check in {@code TicketServiceImpl}).
+   */
+  @ExceptionHandler(OptimisticLockingFailureException.class)
+  public ResponseEntity<ApiErrorResponse> handleOptimisticLockingFailure(
+      OptimisticLockingFailureException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.CONFLICT,
+        "STATE_CONFLICT",
+        "This record was changed by someone else — reload and try again.",
+        List.of(),
+        request);
   }
 
   @ExceptionHandler(Exception.class)

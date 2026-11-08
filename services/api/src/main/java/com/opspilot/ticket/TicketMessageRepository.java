@@ -8,4 +8,6 @@ public interface TicketMessageRepository extends JpaRepository<TicketMessage, UU
 
   List<TicketMessage> findAllByTicketIdAndOrganizationIdOrderByCreatedAtAsc(
       UUID ticketId, UUID organizationId);
+
+  long countByTicketIdAndOrganizationId(UUID ticketId, UUID organizationId);
 }
