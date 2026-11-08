@@ -1,28 +1,52 @@
 # OpsPilot
 
-**AI-native customer support operations platform — early skeleton. Core services and CI exist; there is no real business logic, auth, or AI yet.**
+**AI-native customer support platform.** A multi-tenant SaaS where a support team manages tickets, uploads company knowledge, and runs an AI agent that triages tickets, retrieves tenant-scoped knowledge (RAG), drafts a cited reply — and can never publish anything without a human approving the exact proposed text first.
 
-OpsPilot is a multi-tenant SaaS where a support team manages tickets, uploads company knowledge, and runs an AI agent that classifies tickets, retrieves tenant-scoped knowledge (RAG), proposes a reply with citations, and requires human approval before anything is published. See `docs/PRODUCT_AND_ARCHITECTURE.md` for the full product and architecture spec.
+[![CI](https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform/actions/workflows/ci.yml)
 
-## Status
+## What it does
 
-| Component | Status |
+- 🏢 **Multi-tenant organizations** — invite-based membership, four-tier roles (Owner/Admin/Member/Viewer), every row scoped and enforced server-side, never trusted from the client.
+- 🎫 **Ticket workspace** — searchable, filterable, keyset-paginated ticket queues with an internal conversation thread and optimistic-concurrency-safe status transitions.
+- 📚 **Knowledge base & RAG** — upload TXT/MD/PDF docs; they're chunked, embedded (Postgres + pgvector) and retrieved strictly within the asking tenant's own data.
+- 🤖 **An AI agent on a leash** — a LangGraph-orchestrated worker classifies tickets, retrieves cited knowledge, and proposes a reply, but publishing it always requires an Owner/Admin to approve the *exact* proposal it generated.
+- 🔁 **Durable async execution** — agent runs and tool effects survive a worker crash or a Redis outage: transactional outbox, at-least-once delivery, idempotent effects, checkpointed resumption.
+- 🔍 **Full audit trail** — every run, decision and tool execution is traced and queryable, not collapsed into a final status.
+
+## Architecture
+
+```
+Browser ⇄ Next.js (BFF, Auth0 session)
+            │  server-side bearer token forward
+            ▼
+      Spring Boot API  ──  PostgreSQL + pgvector
+            │  transactional outbox → Redis Streams
+            ▼
+  Python / LangGraph agent worker  ──  LLM + embedding providers
+```
+
+- The browser never holds an access token — the Next.js BFF holds the session and forwards a bearer token server-side.
+- Tenant isolation is enforced twice: application-level role checks *and* composite foreign keys in Postgres, so a bug in one layer can't leak another organization's data.
+- The agent worker never touches business tables directly — it calls a private, service-authenticated internal API that re-validates policy, approval state and idempotency from scratch.
+
+Full spec: [`docs/PRODUCT_AND_ARCHITECTURE.md`](docs/PRODUCT_AND_ARCHITECTURE.md).
+
+## Tech stack
+
+| Layer | Stack |
 |---|---|
-| Planning docs (this repo's `docs/`) | ✅ Committed |
-| `apps/web` (Next.js) | ✅ Skeleton done — lint/typecheck/test/build all pass, verified in a real browser (T04); create-org/member-management/invite-accept forms added (T09), not yet exercised by a real signed-in session (Gate H1) |
-| `services/api` (Spring Boot) | ✅ Core schema (T06), real OIDC JWT auth + authorization policy (T07), `GET /api/v1/me` + first-login provisioning (T08), organization/membership/invitation management (T09), ticket CRUD + pagination + messages (T10); full suite verified in CI — see `docs/PROGRESS.md` for the current test count |
-| `services/agent` (Python / LangGraph) | ✅ Skeleton done — 10/10 tests pass, health verified over real HTTP (T03) |
-| Local infra (`infra/docker-compose.yml`) | 🟡 Written, unverified locally — Docker not installed in this dev environment (T01, Gate H0); works in CI |
-| CI (`.github/workflows/ci.yml`) | ✅ Verified — [a real GitHub Actions run](https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform/actions) passed all jobs (T05) |
-| Auth0 login | 🟡 BFF/provisioning implemented, CI-verified with test-only tokens; real Auth0 sign-in blocked on Gate H1 (T08) |
-| Agent runs, approvals, RAG | ⬜ Not started (T15–T26) |
-| Staging / AWS deployment | ⬜ Not started (T31–T33) |
+| Frontend | Next.js 16 (App Router, Cache Components), React 19, TypeScript, Auth0 (OIDC) |
+| Backend API | Spring Boot 4 / Java 21, Spring Security (OAuth2 resource server), Spring Data JPA, Flyway |
+| AI worker | Python 3.12, LangGraph, FastAPI, Pydantic v2 |
+| Data | PostgreSQL 16 + pgvector, Redis Streams |
+| Infra / CI | Docker Compose (local dev), GitHub Actions, Testcontainers |
 
-This table is updated honestly as each ticket in `docs/TASKS.md` actually passes its acceptance checks — never ahead of verified work. See `docs/PROGRESS.md` for the authoritative per-ticket log.
+## Engineering highlights
 
-## What this repository is
-
-This is a specification-driven build: every planning document in `docs/` was written before any implementation, and `AGENTS.md` sets mandatory engineering rules (tenant isolation, human approval before risky AI actions, no fabricated test results, no committed secrets) that every future ticket must follow. Implementation proceeds one ticket at a time from `docs/TASKS.md` (T00 through T36); each ticket stops for human review before the next begins.
+- **Security-first authorization** — every organization-scoped request resolves the caller's role from the database, never from a client-supplied value; cross-tenant access is its own tested class of security regression.
+- **Human-in-the-loop AI** — the agent can draft and propose, never publish; every AI-authored action requires an explicit approval against the immutable proposal it actually produced.
+- **Test discipline** — real Postgres via Testcontainers in CI, covering tenant isolation, invalid state transitions, stale-write conflicts and replay attacks for every shipped feature.
+- **Spec-driven build** — the full product/architecture/security spec in [`docs/`](docs) was written before any implementation code, and the system is built one reviewed increment at a time.
 
 ## Getting started
 
@@ -30,35 +54,30 @@ This is a specification-driven build: every planning document in `docs/` was wri
 cp .env.example .env   # fill in local-only placeholder values; never commit .env
 make help               # list available targets
 make infra-up           # start local Postgres+pgvector and Redis (Docker required)
-make lint                # eslint + ruff + spotless, across all three services
-make test-unit           # fast, Docker-independent unit tests across all three services
-make api-dev              # services/api on :8080 (needs infra-up first)
-make agent-dev            # services/agent on :8000
-make web-dev               # apps/web on :3000
+make api-dev             # services/api on :8080
+make agent-dev           # services/agent on :8000
+make web-dev              # apps/web on :3000
 ```
-
-Until the corresponding ticket lands, `make` targets for services or checks that don't exist yet will fail with a clear message pointing at the ticket that implements them — they will not silently no-op or pretend to succeed.
 
 ## Repository layout
 
 ```
-AGENTS.md              # mandatory engineering contract for every ticket
-README_START_HERE.md   # how this blueprint is meant to be executed
-CONTRIBUTING.md         # naming, versioning, secrets, commit conventions
 apps/web/               # Next.js 16 / React 19 / TypeScript frontend
 services/api/           # Spring Boot / Java 21 backend (business API + policy)
 services/agent/         # Python 3.12 / LangGraph AI worker
 packages/contracts/     # generated OpenAPI spec + typed TS client
-infra/                  # docker-compose.yml, infra/aws/ (Terraform/CDK, human-gated)
-scripts/                # operational and dev scripts
-docs/                   # full specification set (see below)
+infra/                  # docker-compose.yml, infra/aws/ (Terraform/CDK)
+docs/                   # product, architecture, security and task specs
 evals/                  # AI evaluation datasets and reports
 tests/e2e/               # Playwright end-to-end tests
 benchmarks/             # load-test scripts and recorded results
-.github/workflows/      # CI
 ```
 
-## Documentation index
+## Project status
+
+Built one reviewed ticket at a time from a 36-ticket backlog. Organizations, membership/invitations, and ticket CRUD are live and CI-verified today; the AI agent, approvals, RAG pipeline and cloud deployment are still ahead. The authoritative, per-ticket evidence log lives in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+
+## Documentation
 
 | File | Contents |
 |---|---|
@@ -66,15 +85,10 @@ benchmarks/             # load-test scripts and recorded results
 | `docs/DATA_MODEL.md` | PostgreSQL schema, constraints, state machines |
 | `docs/API_CONTRACT.md` | HTTP/event/agent-tool contracts |
 | `docs/SECURITY_AND_TESTING.md` | Threat model, mandatory test cases, CI gates |
-| `docs/TASKS.md` | T00–T36 sequential implementation backlog |
-| `docs/CODEX_OPERATOR_PROMPT.md` | Copy/paste prompts for running this backlog with an AI engineer |
-| `docs/MANUAL_SETUP.md` | Human-only account/credential/billing gates (H0–H5) |
-| `docs/DEPLOYMENT_RUNBOOK.md` | Local/staging/production procedures and incident runbooks |
-| `docs/DEMO_AND_RESUME.md` | Demo script, benchmark/eval report templates, resume guidance |
+| `docs/TASKS.md` | Sequential implementation backlog |
 | `docs/DECISIONS.md` | Architecture decision record |
-| `docs/DEPENDENCY_DECISIONS.md` | Locked dependency versions per ecosystem |
-| `docs/PROGRESS.md` | Per-ticket status, evidence and blockers (source of truth for "is it done") |
+| `docs/PROGRESS.md` | Per-ticket status and evidence (source of truth) |
 
 ## License
 
-No license has been selected yet for this repository (see `docs/DECISIONS.md`, ADR-006). Until one is added, all rights are reserved by the owner.
+No license has been selected yet (see `docs/DECISIONS.md`, ADR-006). Until one is added, all rights are reserved by the owner.
