@@ -16,7 +16,7 @@ SHELL := /bin/bash
 .PHONY: help infra-up infra-down infra-logs infra-reset \
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e test-security \
-	eval-mock eval-real check seed-demo
+	eval-mock eval-real check seed-demo generate-contracts
 
 # Best-effort: switch to the Node version pinned in apps/web/.nvmrc if nvm is
 # installed, so `pnpm test` doesn't hit the undici/Node ABI mismatch recorded
@@ -97,9 +97,14 @@ test-unit: ## Run fast, Docker-independent unit tests across services — T05
 test-integration: _ensure-docker ## Run Testcontainers integration tests (needs Docker) — T05+
 	cd services/api && ./mvnw -q test -Dtest=$(API_DOCKER_TESTS_INCLUDE)
 
-test-contract: ## Verify generated OpenAPI/TS client has no drift — T11
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T11 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+generate-contracts: _ensure-docker ## Regenerate packages/contracts/{openapi.json,src/schema.d.ts} from the real endpoints — T11
+	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecGenerator
+	cd packages/contracts && npx --yes openapi-typescript@7.13.0 openapi.json -o src/schema.d.ts
+	@echo "Review the diff under packages/contracts/ and commit it."
+
+test-contract: _ensure-docker ## Verify generated OpenAPI/TS client has no drift — T11
+	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecDriftTest
+	cd packages/contracts && bash scripts/check-schema-drift.sh
 
 test-e2e: ## Run Playwright E2E against the local stack — T09+
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T09 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2

@@ -66,17 +66,6 @@ jobs:
           cache-dependency-path: services/api/pom.xml
       - name: Format check (Spotless)
         run: ./mvnw -B -q spotless:check
-      # TEMPORARY bootstrap step (T11): this dev environment has no Docker
-      # (Gate H0), so packages/contracts/openapi.json can't be generated
-      # locally yet. Dumps the real generated spec to the log so it can be
-      # extracted and committed once, then this step is removed — see
-      # docs/DECISIONS.md ADR-033.
-      - name: Bootstrap OpenAPI spec (temporary, remove after first commit)
-        run: |
-          ./mvnw -B -q test -Dtest=OpenApiSpecGenerator
-          echo "===OPENAPI_JSON_START==="
-          cat ../../packages/contracts/openapi.json
-          echo "===OPENAPI_JSON_END==="
       # Full suite, including the Testcontainers-backed ApiApplicationTests —
       # GitHub-hosted ubuntu runners ship Docker, so this (correctly) runs
       # here even though it can't run in every local dev environment
@@ -129,3 +118,10 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      # T11 drift check (the TS-client half; services/api's OpenApiSpecDriftTest
+      # job checks the spec-vs-backend half): packages/contracts/src/schema.d.ts
+      # must be exactly what openapi-typescript produces from the committed
+      # openapi.json right now.
+      - name: Verify generated TS client has no drift
+        working-directory: packages/contracts
+        run: bash scripts/check-schema-drift.sh

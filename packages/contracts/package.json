@@ -1,0 +1,12 @@
+{
+  "name": "@opspilot/contracts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "OpenAPI spec generated from the real services/api endpoints (docs/TASKS.md T11), plus the TypeScript types generated from it. Never hand-edit openapi.json or src/schema.d.ts.",
+  "type": "module",
+  "scripts": {
+    "generate": "npx --yes openapi-typescript@7.13.0 openapi.json -o src/schema.d.ts",
+    "check-drift": "bash scripts/check-schema-drift.sh",
+    "typecheck": "npx --yes -p typescript@5 tsc --noEmit"
+  }
+}

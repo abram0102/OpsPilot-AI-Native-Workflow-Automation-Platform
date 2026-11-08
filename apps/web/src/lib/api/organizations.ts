@@ -1,9 +1,8 @@
-import { auth0 } from "@/lib/auth0";
-import { getApiBaseUrl } from "@/lib/api/config";
-import type { OrganizationMembership } from "@/lib/api/me";
+import { apiClient, requireAccessToken, unwrap } from "@/lib/api/client";
+import type { MembershipRole } from "@/lib/api/me";
 
-/** Mirrors services/api's {@code MembershipRole} (docs/API_CONTRACT.md). */
-export type MembershipRole = OrganizationMembership["role"];
+export type { MembershipRole } from "@/lib/api/me";
+export { ApiError } from "@/lib/api/client";
 
 /** Mirrors services/api's {@code OrganizationResponse}. */
 export interface OrganizationDetail {
@@ -40,75 +39,44 @@ export interface AcceptedInvitation {
   role: MembershipRole;
 }
 
-/** A non-2xx response from the API, carrying the stable error envelope's code and message. */
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
-
-async function accessToken(): Promise<string> {
-  const session = await auth0?.getSession();
-  if (!session) {
+async function authorizedClient() {
+  const token = await requireAccessToken();
+  if (!token) {
     throw new Error("Not signed in.");
   }
-  const { token } = await auth0!.getAccessToken();
-  return token;
-}
-
-/**
- * Forwards the BFF's own access token to the Spring API and parses the stable error envelope
- * (docs/API_CONTRACT.md) into an {@link ApiError} on failure, so server actions can show a caller
- * what went wrong instead of a generic framework error page.
- */
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await accessToken();
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-      Authorization: `Bearer ${token}`,
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let code = "UNKNOWN";
-    let message = `Request failed with status ${response.status}.`;
-    try {
-      const body = (await response.json()) as { error?: { code?: string; message?: string } };
-      code = body.error?.code ?? code;
-      message = body.error?.message ?? message;
-    } catch {
-      // Non-JSON error body — fall back to the generic message above.
-    }
-    throw new ApiError(response.status, code, message);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  return (await response.json()) as T;
+  return apiClient(token);
 }
 
 export async function createOrganization(
   name: string,
   slug: string,
 ): Promise<OrganizationDetail> {
-  return apiRequest<OrganizationDetail>("/api/v1/organizations", {
-    method: "POST",
-    body: JSON.stringify({ name, slug }),
-  });
+  const client = await authorizedClient();
+  const result = await client.POST("/api/v1/organizations", { body: { name, slug } });
+  const data = await unwrap(result);
+  return {
+    id: data.id!,
+    name: data.name!,
+    slug: data.slug!,
+    createdAt: data.createdAt!,
+    myRole: data.myRole!,
+  };
 }
 
 export async function fetchMembers(organizationId: string): Promise<Member[]> {
-  return apiRequest<Member[]>(`/api/v1/organizations/${organizationId}/members`);
+  const client = await authorizedClient();
+  const result = await client.GET("/api/v1/organizations/{orgId}/members", {
+    params: { path: { orgId: organizationId } },
+  });
+  const data = await unwrap(result);
+  return data.map((member) => ({
+    membershipId: member.membershipId!,
+    userId: member.userId!,
+    email: member.email!,
+    displayName: member.displayName!,
+    role: member.role!,
+    memberSince: member.memberSince!,
+  }));
 }
 
 export async function createInvitation(
@@ -116,17 +84,26 @@ export async function createInvitation(
   email: string,
   role: MembershipRole,
 ): Promise<Invitation> {
-  return apiRequest<Invitation>(`/api/v1/organizations/${organizationId}/invitations`, {
-    method: "POST",
-    body: JSON.stringify({ email, role }),
+  const client = await authorizedClient();
+  const result = await client.POST("/api/v1/organizations/{orgId}/invitations", {
+    params: { path: { orgId: organizationId } },
+    body: { email, role },
   });
+  const data = await unwrap(result);
+  return {
+    id: data.id!,
+    email: data.email!,
+    role: data.role!,
+    token: data.token!,
+    expiresAt: data.expiresAt!,
+  };
 }
 
 export async function acceptInvitation(token: string): Promise<AcceptedInvitation> {
-  return apiRequest<AcceptedInvitation>("/api/v1/invitations/accept", {
-    method: "POST",
-    body: JSON.stringify({ token }),
-  });
+  const client = await authorizedClient();
+  const result = await client.POST("/api/v1/invitations/accept", { body: { token } });
+  const data = await unwrap(result);
+  return { organizationId: data.organizationId!, organizationName: data.organizationName!, role: data.role! };
 }
 
 export async function updateMemberRole(
@@ -134,8 +111,18 @@ export async function updateMemberRole(
   membershipId: string,
   role: MembershipRole,
 ): Promise<Member> {
-  return apiRequest<Member>(
-    `/api/v1/organizations/${organizationId}/members/${membershipId}`,
-    { method: "PATCH", body: JSON.stringify({ role }) },
-  );
+  const client = await authorizedClient();
+  const result = await client.PATCH("/api/v1/organizations/{orgId}/members/{memberId}", {
+    params: { path: { orgId: organizationId, memberId: membershipId } },
+    body: { role },
+  });
+  const data = await unwrap(result);
+  return {
+    membershipId: data.membershipId!,
+    userId: data.userId!,
+    email: data.email!,
+    displayName: data.displayName!,
+    role: data.role!,
+    memberSince: data.memberSince!,
+  };
 }
