@@ -26,6 +26,14 @@ app:
     # shown once, to the owner/admin who created it, via a protected response.
     ttl: ${API_INVITATION_TTL:P7D}
 
+# The real OpenAPI contract (T11) must document only production endpoints. springdoc scans the
+# whole Spring context, so during a Testcontainers-backed test run it would otherwise also
+# document the test-only fixture controllers under /__test/** (TestEchoController and friends,
+# component-scanned because they live under com.opspilot.* on the test classpath) — confirmed as
+# a real bug via the bootstrap run, not a hypothetical (docs/DECISIONS.md ADR-033).
+springdoc:
+  paths-to-exclude: /__test/**
+
 management:
   endpoints:
     web:
