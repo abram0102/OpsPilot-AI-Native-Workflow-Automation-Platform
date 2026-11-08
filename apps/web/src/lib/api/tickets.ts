@@ -1,5 +1,7 @@
 import { apiClient, requireAccessToken, unwrap } from "@/lib/api/client";
 
+export { ApiError } from "@/lib/api/client";
+
 export type TicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 export type TicketPriority = "LOW" | "MEDIUM" | "HIGH";
 

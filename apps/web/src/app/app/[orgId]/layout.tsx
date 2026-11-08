@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { fetchMe } from "@/lib/api/me";
@@ -28,7 +29,7 @@ export default async function OrgLayout({ children, params }: LayoutProps<"/app/
         <h1>No access</h1>
         <p>
           {me.displayName} is not a member of this organization. Go back to{" "}
-          <a href="/app">your organizations</a>.
+          <Link href="/app">your organizations</Link>.
         </p>
       </main>
     );

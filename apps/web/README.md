@@ -1,6 +1,6 @@
 # apps/web
 
-Next.js 16 / React 19 / TypeScript frontend. Skeleton implemented in ticket **T04**; **T08** added the real Auth0 OIDC login/logout flow (`@auth0/nextjs-auth0` v4), the authenticated `/app` organization selector, and session-gated `/app/[orgId]/*` layouts. **T09** added a real create-organization form (atomically becoming its owner), an `/app/[orgId]/settings/members` page (member list, invite flow, role management — owner/admin only), and `/invitations/accept`. **T11** rewired every API call onto a typed client (`openapi-fetch` + types generated from `packages/contracts/openapi.json`) instead of hand-rolled `fetch`; `src/lib/api/tickets.ts` is ready for **T12**'s ticket screens. Still honest about what's missing: with no Auth0 application configured (Gate H1), every one of these still starts from `/sign-in`'s "not configured" state rather than a fake login, so none of it has been exercised by a real signed-in browser session yet — only by the backend's own Testcontainers HTTP tests and mocked-`fetch` unit tests of the typed client itself.
+Next.js 16 / React 19 / TypeScript frontend. Skeleton implemented in ticket **T04**; **T08** added the real Auth0 OIDC login/logout flow (`@auth0/nextjs-auth0` v4), the authenticated `/app` organization selector, and session-gated `/app/[orgId]/*` layouts. **T09** added a real create-organization form (atomically becoming its owner), an `/app/[orgId]/settings/members` page (member list, invite flow, role management — owner/admin only), and `/invitations/accept`. **T11** rewired every API call onto a typed client (`openapi-fetch` + types generated from `packages/contracts/openapi.json`) instead of hand-rolled `fetch`. **T12** added the ticket screens: a real dashboard (per-status counts), `/app/[orgId]/tickets` (filter/paginate/create), and `/app/[orgId]/tickets/[ticketId]` (detail, status/priority editing with collision errors, message thread). Still honest about what's missing: with no Auth0 application configured (Gate H1), every one of these still starts from `/sign-in`'s "not configured" state rather than a fake login, so none of it has been exercised by a real signed-in browser session yet — only by the backend's own Testcontainers HTTP tests and mocked-`fetch`/component unit tests on the frontend side.
 
 ## Requirements
 
@@ -33,7 +33,9 @@ src/app/                  # App Router routes
   sign-in/                # real Auth0 login link, or honest "not configured" state
   app/page.tsx            # organization selector (T08) + create-organization form (T09)
   app/[orgId]/layout.tsx  # session + membership gate, then AppShell (instant = false)
-  app/[orgId]/dashboard/  # dashboard placeholder, no fake data
+  app/[orgId]/dashboard/  # real per-status ticket counts (T12), no fabricated totals
+  app/[orgId]/tickets/    # filter/paginate/create (T12)
+  app/[orgId]/tickets/[ticketId]/ # detail, status/priority editing, message thread (T12)
   app/[orgId]/settings/members/ # member list, invite flow, role management (T09)
   invitations/accept/     # where an invitation link lands (T09)
   error.tsx, loading.tsx  # root error boundary / loading UI
