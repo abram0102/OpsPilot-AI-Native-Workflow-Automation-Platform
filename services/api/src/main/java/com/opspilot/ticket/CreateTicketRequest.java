@@ -1,5 +1,6 @@
 package com.opspilot.ticket;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import java.util.UUID;
@@ -18,6 +19,14 @@ public record CreateTicketRequest(
     @NotBlank String description,
     TicketPriority priority) {
 
+  /**
+   * {@code @JsonIgnore} keeps this validation-only method out of both Jackson's own (de)serialized
+   * view of this record and the OpenAPI schema springdoc derives from it (T11) — without it, the
+   * {@code is...} getter convention makes a fake {@code customerReferenceValid} boolean field show
+   * up in {@code CreateTicketRequest}'s generated schema, confirmed as a real bug via T11's first
+   * generated spec, not a hypothetical (docs/DECISIONS.md ADR-033).
+   */
+  @JsonIgnore
   @AssertTrue(message = "either customerId or customerName must be provided")
   public boolean isCustomerReferenceValid() {
     return customerId != null || (customerName != null && !customerName.isBlank());
