@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { fetchMe } from "@/lib/api/me";
+import { CreateOrganizationForm } from "./CreateOrganizationForm";
 
 export const instant = false;
 
 /**
- * Organization selector (T08). A signed-in user with exactly one organization
- * skips straight to its dashboard; with none, there's nothing to select yet —
- * org creation is T09's job, not this one.
+ * Organization selector (T08) + creation (T09). A signed-in user with exactly
+ * one organization skips straight to its dashboard; with none, they get a
+ * real create-organization form (atomically becoming its owner — see
+ * services/api's {@code OrganizationServiceImpl}).
  */
 export default async function AppIndexPage() {
   const me = await fetchMe();
@@ -24,10 +26,10 @@ export default async function AppIndexPage() {
     <main id="main-content" tabIndex={-1}>
       <h1>Your organizations</h1>
       {me.organizations.length === 0 ? (
-        <p>
-          {me.displayName} doesn&apos;t belong to an organization yet. Creating one is ticket T09 —
-          not implemented here yet.
-        </p>
+        <>
+          <p>{me.displayName} doesn&apos;t belong to an organization yet.</p>
+          <CreateOrganizationForm />
+        </>
       ) : (
         <ul>
           {me.organizations.map((org) => (

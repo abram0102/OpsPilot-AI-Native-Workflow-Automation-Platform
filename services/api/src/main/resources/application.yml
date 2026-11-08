@@ -21,6 +21,10 @@ app:
     # Default false (safe); local profile turns it on. ProductionSafetyGuard
     # refuses to start if this is ever true under the "production" profile.
     allow-test-issuer: ${API_ALLOW_TEST_ISSUER:false}
+  invitations:
+    # ISO-8601 duration. No invitation email is sent in V1 (docs/TASKS.md T09); the token is
+    # shown once, to the owner/admin who created it, via a protected response.
+    ttl: ${API_INVITATION_TTL:P7D}
 
 management:
   endpoints:

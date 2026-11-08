@@ -11,10 +11,10 @@ interface AppShellProps {
 
 /**
  * Left nav + narrow top toolbar, per docs/PRODUCT_AND_ARCHITECTURE.md
- * section 6. Only "Dashboard" links anywhere real today; the other
- * org-scoped sections (Tickets T10, Knowledge T13, Runs T18, Approvals T22,
- * Settings T09) are added here as their own tickets land — not as dead
- * links ahead of time.
+ * section 6. "Dashboard" and "Settings" (members/invitations, T09) link
+ * somewhere real today; the other org-scoped sections (Tickets T10,
+ * Knowledge T13, Runs T18, Approvals T22) are added here as their own
+ * tickets land — not as dead links ahead of time.
  */
 export function AppShell({ orgId, orgName, user, children }: AppShellProps) {
   return (
@@ -36,9 +36,12 @@ export function AppShell({ orgId, orgName, user, children }: AppShellProps) {
             <li>
               <Link href={`/app/${orgId}/dashboard`}>Dashboard</Link>
             </li>
+            <li>
+              <Link href={`/app/${orgId}/settings/members`}>Settings</Link>
+            </li>
           </ul>
           <p className={styles.navNote}>
-            Tickets, Knowledge, Runs, Approvals and Settings are added as their tickets land (see
+            Tickets, Knowledge, Runs and Approvals are added as their tickets land (see
             docs/TASKS.md).
           </p>
         </nav>

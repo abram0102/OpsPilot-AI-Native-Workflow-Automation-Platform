@@ -64,6 +64,18 @@ public class GlobalExceptionHandler {
         HttpStatus.FORBIDDEN, "FORBIDDEN", "You cannot perform this action.", List.of(), request);
   }
 
+  @ExceptionHandler(NotFoundException.class)
+  public ResponseEntity<ApiErrorResponse> handleNotFound(
+      NotFoundException ex, HttpServletRequest request) {
+    return respond(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), List.of(), request);
+  }
+
+  @ExceptionHandler(ConflictException.class)
+  public ResponseEntity<ApiErrorResponse> handleConflict(
+      ConflictException ex, HttpServletRequest request) {
+    return respond(HttpStatus.CONFLICT, "STATE_CONFLICT", ex.getMessage(), List.of(), request);
+  }
+
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiErrorResponse> handleUnexpected(
       Exception ex, HttpServletRequest request) {
