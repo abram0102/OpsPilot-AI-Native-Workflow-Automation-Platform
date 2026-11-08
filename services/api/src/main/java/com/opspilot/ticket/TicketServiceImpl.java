@@ -75,7 +75,7 @@ public class TicketServiceImpl implements TicketService {
     TicketPriority priority =
         request.priority() != null ? request.priority() : TicketPriority.MEDIUM;
     Ticket ticket =
-        tickets.save(
+        tickets.saveAndFlush(
             new Ticket(
                 organizationId,
                 customerId,
@@ -114,13 +114,16 @@ public class TicketServiceImpl implements TicketService {
         (cursor == null || cursor.isBlank()) ? null : TicketCursors.decode(cursor);
 
     List<Ticket> rows =
-        tickets.findPage(
-            organizationId,
-            status,
-            priority,
-            decoded != null ? decoded.createdAt() : null,
-            decoded != null ? decoded.id() : null,
-            PageRequest.of(0, pageSize + 1));
+        decoded == null
+            ? tickets.findFirstPage(
+                organizationId, status, priority, PageRequest.of(0, pageSize + 1))
+            : tickets.findPageAfter(
+                organizationId,
+                status,
+                priority,
+                decoded.createdAt(),
+                decoded.id(),
+                PageRequest.of(0, pageSize + 1));
 
     boolean hasMore = rows.size() > pageSize;
     List<Ticket> page = hasMore ? rows.subList(0, pageSize) : rows;
@@ -169,7 +172,7 @@ public class TicketServiceImpl implements TicketService {
       ticket.setAssigneeId(request.assigneeId());
     }
 
-    return TicketResponse.from(tickets.save(ticket));
+    return TicketResponse.from(tickets.saveAndFlush(ticket));
   }
 
   private Ticket findTicket(UUID organizationId, UUID ticketId) {
