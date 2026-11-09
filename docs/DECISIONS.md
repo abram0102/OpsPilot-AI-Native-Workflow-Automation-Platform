@@ -308,4 +308,24 @@ Status: **Accepted**, 2026-11-09.
 
 **One mismatch left for T24, not papered over.** T13's outbox row uses `event_type = "knowledge.document.queued"`, while docs/API_CONTRACT.md names the Redis envelope `knowledge.ingest.requested`. The handler added here reads the payload and is indifferent to the name, but the publisher in T24 has to reconcile the two.
 
+## ADR-041 — T17: no endpoint, and the three choices docs/DATA_MODEL.md left to the implementer
+
+Status: **Accepted**, 2026-11-09.
+
+**T17 adds no HTTP endpoint, deliberately.** Its build line asks for a "list/read API skeleton **only where a working DB implementation exists**" — a restraint, not an instruction to build one. Every run endpoint (`POST tickets/{id}/runs`, `GET runs`, `GET run`, `GET steps`, cancel) belongs to T18; every approval endpoint (list/detail/approve/reject) belongs to T22. Nothing can *create* a run until T18 exists, so any endpoint added now would read tables that nothing populates and return an empty list forever — the "empty placeholder endpoint" AGENTS.md rule 7 explicitly forbids. The acceptance criterion is that invalid transitions are rejected **by the service**, not by an API, and that is exactly what `AgentRunService`, `ApprovalService` and `ToolExecutionService` do. A welcome consequence: with no endpoint, ADR-037's contract-regeneration round-trip does not apply to this ticket at all.
+
+**`outbox_events` is not re-created.** T13 created it early in V003, and ADR-035 promised this migration would add `audit_events` rather than duplicate it. V005 keeps that promise. No extra outbox index is added either: the publisher that would show which indexes it actually needs is T24, and an index carried unused until then is a cost with no reader.
+
+**Choice 1 — a rejected approval completes the run.** docs/DATA_MODEL.md says to "choose one and document it". The run moves to `COMPLETED`, not `FAILED`. The agent did its job: it produced a proposal and a human exercised exactly the control this product is built around. Calling that a failure would make the approval gate look like an error path, and would pollute any failure-rate metric with healthy human judgement. The rejection itself is recorded on the approval row, so nothing is lost.
+
+**Choice 2 — double approval is idempotent, not a 409.** Deciding an approval the *same* way twice returns the stored outcome unchanged, including its original `decision_at`. At-least-once delivery and double-clicked buttons both produce this, and neither is a user error. Deciding it a *different* way is a genuine conflict and is refused — the first decision stands. Together with the row lock in `findByIdAndOrganizationIdForUpdate`, this satisfies AGENTS.md's "double approval cannot execute a tool twice" without making the common case an error.
+
+**Choice 3 — `agent_steps.step_type` and `status` values.** The data model names these columns but never enumerates them, so they are defined here: `CLASSIFY, RETRIEVE, DRAFT_REPLY, PROPOSE_TOOL, AWAIT_APPROVAL, EXECUTE_TOOL, FINALIZE` and `STARTED, SUCCEEDED, FAILED, SKIPPED`, matching the graph T19 will walk.
+
+**`idempotency_key` lands on `agent_runs` now**, with a partial unique index scoped to the organization (so two tenants may reuse a key, and rows without one never collide). T18's acceptance requires "double-click start with same idempotency key gives one run"; the column belongs to the table this ticket owns, and adding it here avoids a V006 patch to schema that was just written.
+
+**Lease columns and the claimable index.** `lease_owner`/`lease_expires_at` plus a partial index over the non-terminal states answer the reclaimer's one question — which runs can be picked up right now. A terminal transition clears the lease, since a finished run holding one would be invisible to that query forever for no reason. The claiming *logic* here is the persistence rule only; the worker that uses it is T25.
+
+**A convention discovered the hard way:** the test was first written with JUnit `@Nested` classes for grouping, and the Docker-independent local run still tried to execute it — Surefire's `!ClassName` exclusion does not match nested inner classes (`AgentPersistenceIntegrationTest$Approvals`). No other test in this repository uses `@Nested`. It was flattened to match, rather than making the Makefile's exclusion pattern cleverer, because the next person adding a Testcontainers test will copy an existing one.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.
