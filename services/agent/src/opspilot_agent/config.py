@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,15 +46,25 @@ class Settings(BaseSettings):
     postgres_password: str | None = None
 
     llm_provider: str = "openai"
+    llm_base_url: str = "https://api.openai.com/v1"
     llm_model_id: str | None = None
-    llm_api_key: str | None = None
+    # SecretStr, not str: a settings dump, log line or traceback then shows `**********` rather
+    # than the key (docs/SECURITY_AND_TESTING.md, "mask secrets/PII in logs").
+    llm_api_key: SecretStr | None = None
     embedding_model_id: str | None = None
     embedding_dimensions: int = 1536
     llm_monthly_budget_usd: float = 0
 
+    # Per-call budgets for the real adapter (T15). Mock mode ignores all of these.
+    llm_timeout_seconds: float = 30.0
+    llm_max_attempts: int = 3
+    llm_circuit_breaker_threshold: int = 5
+    llm_circuit_breaker_reset_seconds: float = 60.0
+
     @model_validator(mode="after")
     def _require_provider_credentials_outside_mock_mode(self) -> Settings:
-        if self.ai_mode is AiMode.REAL and not self.llm_api_key:
+        has_api_key = self.llm_api_key is not None and bool(self.llm_api_key.get_secret_value())
+        if self.ai_mode is AiMode.REAL and not has_api_key:
             raise ValueError(
                 "AI_MODE=real requires LLM_API_KEY to be set (see docs/MANUAL_SETUP.md Gate "
                 "H2). Use AI_MODE=mock for local development and CI; no API key is needed there."
