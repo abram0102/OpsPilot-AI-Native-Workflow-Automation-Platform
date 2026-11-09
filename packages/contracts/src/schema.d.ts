@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/organizations/{orgId}/knowledge/uploads/local-object": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Local storage adapter only: upload the actual file bytes */
+        put: operations["receiveLocalUpload"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organizations": {
         parameters: {
             query?: never;
@@ -50,6 +67,40 @@ export interface paths {
         put?: never;
         /** Post a human-authored internal message */
         post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/knowledge/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a proposed upload and get a place to PUT the bytes */
+        post: operations["createUploadSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/knowledge/documents/{docId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the upload and queue ingestion */
+        post: operations["completeUpload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -154,6 +205,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organizations/{orgId}/knowledge/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List an organization's knowledge documents */
+        get: operations["list_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/knowledge/documents/{docId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A knowledge document's status and metadata */
+        get: operations["get_2"];
+        put?: never;
+        post?: never;
+        /** Delete a knowledge document and its stored object */
+        delete: operations["delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -239,6 +325,35 @@ export interface components {
             sourceRunId?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        CreateUploadSessionRequest: {
+            filename: string;
+            mimeType: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256: string;
+        };
+        CreateUploadSessionResponse: {
+            /** Format: uuid */
+            documentId?: string;
+            objectKey?: string;
+            uploadUrl?: string;
+            uploadMethod?: string;
+        };
+        KnowledgeDocumentResponse: {
+            /** Format: uuid */
+            id?: string;
+            filename?: string;
+            mimeType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            /** @enum {string} */
+            status?: "UPLOADING" | "QUEUED" | "PROCESSING" | "READY" | "FAILED";
+            errorCode?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
         CreateInvitationRequest: {
             /** Format: email */
@@ -346,6 +461,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    receiveLocalUpload: {
+        parameters: {
+            query: {
+                objectKey: string;
+            };
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     create: {
         parameters: {
             query?: never;
@@ -469,6 +606,55 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["TicketMessageResponse"];
+                };
+            };
+        };
+    };
+    createUploadSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUploadSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CreateUploadSessionResponse"];
+                };
+            };
+        };
+    };
+    completeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["KnowledgeDocumentResponse"];
                 };
             };
         };
@@ -641,6 +827,72 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["MemberResponse"][];
                 };
+            };
+        };
+    };
+    list_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["KnowledgeDocumentResponse"][];
+                };
+            };
+        };
+    };
+    get_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["KnowledgeDocumentResponse"];
+                };
+            };
+        };
+    };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

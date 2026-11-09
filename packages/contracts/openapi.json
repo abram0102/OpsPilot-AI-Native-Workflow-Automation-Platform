@@ -9,6 +9,34 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/api/v1/organizations/{orgId}/knowledge/uploads/local-object" : {
+      "put" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "Local storage adapter only: upload the actual file bytes",
+        "operationId" : "receiveLocalUpload",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "objectKey",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
     "/api/v1/organizations" : {
       "post" : {
         "tags" : [ "organization-controller" ],
@@ -208,6 +236,80 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/TicketMessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/knowledge/uploads" : {
+      "post" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "Validate a proposed upload and get a place to PUT the bytes",
+        "operationId" : "createUploadSession",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateUploadSessionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CreateUploadSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/knowledge/documents/{docId}/complete" : {
+      "post" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "Confirm the upload and queue ingestion",
+        "operationId" : "completeUpload",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "docId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/KnowledgeDocumentResponse"
                 }
               }
             }
@@ -462,6 +564,100 @@
         }
       }
     },
+    "/api/v1/organizations/{orgId}/knowledge/documents" : {
+      "get" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "List an organization's knowledge documents",
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/KnowledgeDocumentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/knowledge/documents/{docId}" : {
+      "get" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "A knowledge document's status and metadata",
+        "operationId" : "get_2",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "docId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/KnowledgeDocumentResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "Knowledge" ],
+        "summary" : "Delete a knowledge document and its stored object",
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "docId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
     "/api/v1/me" : {
       "get" : {
         "tags" : [ "me-controller" ],
@@ -639,6 +835,82 @@
             "format" : "uuid"
           },
           "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "CreateUploadSessionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "filename" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "mimeType" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "sizeBytes" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          },
+          "sha256" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "^[0-9a-f]{64}$"
+          }
+        },
+        "required" : [ "filename", "mimeType", "sha256" ]
+      },
+      "CreateUploadSessionResponse" : {
+        "type" : "object",
+        "properties" : {
+          "documentId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "objectKey" : {
+            "type" : "string"
+          },
+          "uploadUrl" : {
+            "type" : "string"
+          },
+          "uploadMethod" : {
+            "type" : "string"
+          }
+        }
+      },
+      "KnowledgeDocumentResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "filename" : {
+            "type" : "string"
+          },
+          "mimeType" : {
+            "type" : "string"
+          },
+          "sizeBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "UPLOADING", "QUEUED", "PROCESSING", "READY", "FAILED" ]
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
             "type" : "string",
             "format" : "date-time"
           }
