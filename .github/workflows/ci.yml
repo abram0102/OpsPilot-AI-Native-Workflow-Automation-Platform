@@ -66,6 +66,18 @@ jobs:
           cache-dependency-path: services/api/pom.xml
       - name: Format check (Spotless)
         run: ./mvnw -B -q spotless:check
+      # TEMPORARY bootstrap step (T13): this dev environment has no Docker
+      # (Gate H0), so packages/contracts/openapi.json can't be regenerated
+      # locally to pick up T13's new knowledge endpoints. Dumps the real
+      # generated spec to the log so it can be extracted and committed once,
+      # then this step is removed — same pattern as T11's own bootstrap
+      # (docs/DECISIONS.md ADR-033).
+      - name: Bootstrap OpenAPI spec (temporary, remove after first commit)
+        run: |
+          ./mvnw -B -q test -Dtest=OpenApiSpecGenerator
+          echo "===OPENAPI_JSON_START==="
+          cat ../../packages/contracts/openapi.json
+          echo "===OPENAPI_JSON_END==="
       # Full suite, including the Testcontainers-backed ApiApplicationTests —
       # GitHub-hosted ubuntu runners ship Docker, so this (correctly) runs
       # here even though it can't run in every local dev environment

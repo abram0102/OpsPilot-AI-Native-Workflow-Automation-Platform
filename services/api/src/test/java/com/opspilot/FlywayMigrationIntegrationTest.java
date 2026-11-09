@@ -27,7 +27,12 @@ class FlywayMigrationIntegrationTest {
     MigrationInfo current = flyway.info().current();
 
     assertThat(current).isNotNull();
-    assertThat(current.getDescription()).isEqualTo("tickets");
+    // Whatever the latest migration happens to be (currently V003__knowledge.sql, T13) — this
+    // test only cares that Flyway applied everything cleanly and agrees it's up to date, not
+    // which specific migration is newest, so it doesn't need another one-line fix every time a
+    // ticket adds one.
+    assertThat(current.getDescription()).isNotBlank();
+    assertThat(flyway.info().pending()).isEmpty();
     assertThat(flyway.info().applied()).hasSizeGreaterThanOrEqualTo(2);
 
     // Re-running validate() against an already-migrated schema (what a
