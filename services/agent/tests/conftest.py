@@ -104,11 +104,14 @@ def other_organization(db_connection) -> UUID:
 
 
 def _insert_organization(connection, name: str, slug: str) -> UUID:
+    # `organizations.created_by` is NOT NULL and references `users`, so an organization cannot
+    # exist without its creator — every org fixture makes one.
+    creator_id = insert_user(connection, f"creator-{slug}@example.test")
     org_id = uuid4()
     with connection.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO organizations (id, name, slug) VALUES (%s, %s, %s)",
-            (org_id, name, slug),
+            "INSERT INTO organizations (id, name, slug, created_by) VALUES (%s, %s, %s, %s)",
+            (org_id, name, slug, creator_id),
         )
     connection.commit()
     return org_id
