@@ -75,7 +75,7 @@ benchmarks/             # load-test scripts and recorded results
 
 ## Project status
 
-Built one reviewed ticket at a time from a 36-ticket backlog. Organizations, membership/invitations, ticket CRUD, a typed API client generated from the real backend (with a CI check that fails on drift), and the ticket management screens are live and CI-verified today; the AI agent, approvals, RAG pipeline and cloud deployment are still ahead. The authoritative, per-ticket evidence log lives in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+Built one reviewed ticket at a time from a 36-ticket backlog. Organizations, membership/invitations, ticket CRUD and management screens, a typed API client generated from the real backend (with a CI check that fails on drift), and knowledge document upload (local + S3 storage) are live and CI-verified today; the AI agent, approvals, RAG pipeline and cloud deployment are still ahead. The authoritative, per-ticket evidence log lives in [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
 ## Documentation
 

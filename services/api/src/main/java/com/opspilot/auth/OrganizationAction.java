@@ -17,6 +17,7 @@ public enum OrganizationAction {
   VIEW_ORGANIZATION(MembershipRole.VIEWER),
   VIEW_TICKETS(MembershipRole.VIEWER),
   MANAGE_TICKETS(MembershipRole.MEMBER),
+  VIEW_KNOWLEDGE(MembershipRole.VIEWER),
   UPLOAD_KNOWLEDGE(MembershipRole.MEMBER),
   DELETE_KNOWLEDGE(MembershipRole.ADMIN),
   RUN_AGENT(MembershipRole.MEMBER),

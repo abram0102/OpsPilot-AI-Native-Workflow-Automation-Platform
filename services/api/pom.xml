@@ -15,7 +15,19 @@
 	<description>OpsPilot Spring Boot API</description>
 	<properties>
 		<java.version>21</java.version>
+		<aws-sdk.version>2.57.11</aws-sdk.version>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${aws-sdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -56,6 +68,16 @@
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>3.2.0</version>
+		</dependency>
+		<!-- S3StorageService (T13) — private bucket, signed PUT URL; only active when
+		     storage.provider=s3. Untestable in this environment (Gate H3: no AWS
+		     credentials/bucket) — see docs/DECISIONS.md for what that does and doesn't mean. -->
+		<!-- S3Presigner and friends are bundled directly in this artifact in the current SDK —
+		     verified by inspecting the actual jar; there is no separate "s3-presigner" module
+		     (confirmed via Maven Central's search API returning zero results for it). -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
 		</dependency>
 
 		<dependency>

@@ -34,6 +34,16 @@ app:
 springdoc:
   paths-to-exclude: /__test/**
 
+# T13: local filesystem adapter by default; S3 only when storage.provider=s3 (Gate H3 — a real
+# AWS bucket/credentials, not needed for this provider's default). .env.example documents these
+# as STORAGE_PROVIDER/STORAGE_LOCAL_DIR/AWS_S3_BUCKET/AWS_REGION.
+storage:
+  provider: ${STORAGE_PROVIDER:local}
+  local-dir: ${STORAGE_LOCAL_DIR:.local-storage}
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    region: ${AWS_REGION:}
+
 management:
   endpoints:
     web:
