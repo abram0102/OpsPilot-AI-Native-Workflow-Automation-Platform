@@ -1,0 +1,11 @@
+.dropZone {
+  padding: 1rem;
+  border: 2px dashed var(--border);
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.dragging {
+  border-style: solid;
+  background: var(--surface);
+}
