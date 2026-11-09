@@ -34,6 +34,14 @@ src/opspilot_agent/
     __init__.py          # PromptName + loader; a revision is a file, not an edit
     classification.v1.md # Version-controlled prompts (docs/SECURITY_AND_TESTING.md §5)
     reply_draft.v1.md
+  knowledge/
+    extraction.py        # TXT/MD/PDF with sandbox + decompression guards
+    chunking.py          # ~600 tokens, ~100 overlap (approximate — no tokenizer)
+    indexer.py           # idempotent indexing, status transitions, deletion races
+    retrieval.py         # exact cosine, org + READY filtered in SQL
+    storage.py           # reads the Java local adapter's root, containment-checked
+    handler.py           # ingest handler + CLI (Redis consumer is T25)
+  db.py                  # psycopg connection; Flyway still owns the schema
   providers/
     protocols.py         # LLMProvider / EmbeddingProvider Protocol (docs/API_CONTRACT.md)
     schemas.py           # Classification / ReplyDraft structured outputs
@@ -48,7 +56,30 @@ src/opspilot_agent/
 tests/
 ```
 
-`worker`, `retrieval`, `graphs`, `tools`, `evals`, `telemetry` (per `AGENTS.md`'s expected layout) are added by the tickets that need them (T16, T19, T25, T30), not speculatively ahead of time.
+`worker`, `graphs`, `tools`, `telemetry` (per `AGENTS.md`'s expected layout) are added by the tickets that need them (T19, T25, T30), not speculatively ahead of time.
+
+## Knowledge indexing and retrieval (T16)
+
+The worker indexes documents and searches them directly against PostgreSQL + pgvector. That is narrower than it sounds: its *business actions* on tickets still go through the Java internal API (T21), and nothing here touches tickets, approvals or runs. Flyway in `services/api` owns the schema; this service creates no tables. See `docs/DECISIONS.md` ADR-040.
+
+```bash
+# Index one document (stand-in for the T25 Redis consumer)
+uv run python -m opspilot_agent.knowledge.handler \
+  --organization-id <uuid> --document-id <uuid>
+```
+
+Retrieval always filters on `organization_id` **and** `status = 'READY'` in the SQL itself, never on the results afterwards — the failure mode would be silent cross-tenant disclosure.
+
+### Database-backed tests
+
+Tests marked `db` need PostgreSQL with pgvector and are **skipped unless `POSTGRES_TEST_DSN` is set**, because this project's development environment has no Docker (Gate H0):
+
+```bash
+uv run pytest -m 'not db'   # what runs on a machine without a database
+uv run pytest -m db         # needs POSTGRES_TEST_DSN
+```
+
+CI supplies a `pgvector/pgvector:pg16` service container and runs the `db` selection as its own step, so a skip there fails the build rather than passing quietly.
 
 ## Providers
 

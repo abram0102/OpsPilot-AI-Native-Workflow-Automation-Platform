@@ -43,7 +43,17 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_db: str = "opspilot"
     postgres_user: str = "opspilot"
-    postgres_password: str | None = None
+    # SecretStr for the same reason as the API key: a settings dump must not carry it.
+    postgres_password: SecretStr | None = None
+
+    # Where the Java local storage adapter writes uploaded documents (T13). The indexer reads
+    # the same root; see docs/DECISIONS.md ADR-040.
+    storage_local_dir: str = ".local-storage"
+
+    # docs/PRODUCT_AND_ARCHITECTURE.md: "~600 tokens with ~100 overlap". Approximate by
+    # construction — this service has no tokenizer (ADR-039).
+    chunk_tokens: int = 600
+    chunk_overlap_tokens: int = 100
 
     llm_provider: str = "openai"
     llm_base_url: str = "https://api.openai.com/v1"

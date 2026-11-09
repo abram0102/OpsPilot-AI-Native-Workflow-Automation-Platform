@@ -79,6 +79,25 @@ jobs:
     defaults:
       run:
         working-directory: services/agent
+    # T16's indexer and retrieval write and query real pgvector columns, so they need a real
+    # database. The Java side gets one from Testcontainers; this job uses a service container,
+    # which needs no Docker-in-test and starts once for the whole job.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: opspilot_test
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot-ci-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_TEST_DSN: postgresql://opspilot:opspilot-ci-local-only@localhost:5432/opspilot_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -93,6 +112,15 @@ jobs:
         run: uv run pytest
         env:
           AI_MODE: mock # the default anyway — explicit here, matching AGENTS.md rule 16
+      # Run the database-backed tests again on their own, so their result is visible rather than
+      # buried in an aggregate pass. They skip wherever POSTGRES_TEST_DSN is absent (any machine
+      # without Docker) — but the fixture turns that skip into a failure when CI is set, which
+      # GitHub Actions always sets. A lost service container therefore fails the build instead of
+      # passing while proving nothing.
+      - name: Database-backed tests (must actually run)
+        run: uv run pytest -m db --strict-markers
+        env:
+          AI_MODE: mock
 
   web:
     name: Next.js (apps/web)

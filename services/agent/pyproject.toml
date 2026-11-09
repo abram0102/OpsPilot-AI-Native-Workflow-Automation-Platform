@@ -13,6 +13,7 @@ dependencies = [
     # Runtime (not just test) since T15: the real provider adapter speaks HTTP directly rather
     # than through a vendor SDK. See docs/DEPENDENCY_DECISIONS.md.
     "httpx>=0.27",
+    "pypdf>=7.0.0",
 ]
 
 [dependency-groups]
@@ -34,6 +35,12 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    # Needs PostgreSQL + pgvector via POSTGRES_TEST_DSN. Skipped where there is no database
+    # (Gate H0); CI runs these as their own step against a service container, so they cannot
+    # silently skip there.
+    "db: requires a real PostgreSQL database",
+]
 
 [build-system]
 requires = ["hatchling"]

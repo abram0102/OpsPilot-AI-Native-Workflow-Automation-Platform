@@ -27,7 +27,7 @@ Browser ⇄ Next.js (BFF, Auth0 session)
 
 - The browser never holds an access token — the Next.js BFF holds the session and forwards a bearer token server-side.
 - Tenant isolation is enforced twice: application-level role checks *and* composite foreign keys in Postgres, so a bug in one layer can't leak another organization's data.
-- The agent worker never touches business tables directly — it calls a private, service-authenticated internal API that re-validates policy, approval state and idempotency from scratch.
+- The agent worker never performs a business action directly — every ticket write goes through a private, service-authenticated internal API that re-validates policy, approval state and idempotency from scratch. Its own indexing and retrieval read and write the knowledge tables under an explicit tenant filter.
 
 Full spec: [`docs/PRODUCT_AND_ARCHITECTURE.md`](docs/PRODUCT_AND_ARCHITECTURE.md).
 

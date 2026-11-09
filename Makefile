@@ -91,11 +91,14 @@ API_DOCKER_TESTS_INCLUDE := ApiApplicationTests,FlywayMigrationIntegrationTest,M
 
 test-unit: ## Run fast, Docker-independent unit tests across services — T05
 	cd apps/web && $(NVM_USE) pnpm test
-	cd services/agent && uv run pytest
+	cd services/agent && uv run pytest -m 'not db'
 	cd services/api && ./mvnw -q test -Dtest='$(API_DOCKER_TESTS_EXCLUDE)'
 
 test-integration: _ensure-docker ## Run Testcontainers integration tests (needs Docker) — T05+
 	cd services/api && ./mvnw -q test -Dtest=$(API_DOCKER_TESTS_INCLUDE)
+	@echo "services/agent database-backed tests need POSTGRES_TEST_DSN pointing at a"
+	@echo "PostgreSQL with pgvector (see docs/PROGRESS.md T16); skipped when it is unset."
+	cd services/agent && uv run pytest -m db
 
 generate-contracts: _ensure-docker ## Regenerate packages/contracts/{openapi.json,src/schema.d.ts} from the real endpoints — T11
 	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecGenerator
