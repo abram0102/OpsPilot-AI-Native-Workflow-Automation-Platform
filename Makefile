@@ -117,13 +117,12 @@ test-security: ## Run the security/tenant-isolation regression suite — T28
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T28 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
 	@exit 1
 
-eval-mock: ## Run deterministic mock AI evaluation — T30
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T30 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+eval-mock: ## Run the offline smoke evaluation (no API key, no cost) — T20; scored dataset is T30
+	cd services/agent && uv run python -m opspilot_agent.evals
 
-eval-real: ## Run real-provider AI evaluation, requires H2 gate + budget — T20
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T20 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+eval-real: ## Run the real-provider smoke evaluation — BILLABLE, requires Gate H2 — T20
+	@printf '\033[33m! %s calls a paid LLM provider.\033[0m It refuses unless Gate H2 is set up (AI_MODE=real, ALLOW_REAL_LLM_CALLS, LLM_API_KEY, model ids).\n' "$@" >&2
+	cd services/agent && uv run python -m opspilot_agent.evals --real
 
 seed-demo: ## Seed fictional local/test tenants, users and tickets (needs infra-up first) — T06
 	cd services/api && ./mvnw -q spring-boot:run -Dspring-boot.run.profiles=local,seed

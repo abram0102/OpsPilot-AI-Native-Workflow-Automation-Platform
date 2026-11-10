@@ -9,6 +9,7 @@ than surfacing as an opaque error deep inside a provider call.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 
@@ -67,6 +68,17 @@ class Settings(BaseSettings):
     embedding_model_id: str | None = None
     embedding_dimensions: int = 1536
     llm_monthly_budget_usd: float = 0
+
+    # Cost is only ever computed from rates an operator supplied. Unset means a recorded cost of
+    # `null` rather than a guess — T20's acceptance says cost must be "recorded, not made up",
+    # and prices change per model, region and account (docs/DECISIONS.md ADR-044).
+    llm_input_cost_per_mtok: Decimal | None = None
+    llm_output_cost_per_mtok: Decimal | None = None
+
+    # Two independent locks on paid usage. `AI_MODE=real` alone is not enough: this flag has to
+    # be set deliberately, so a stray environment cannot start spending money.
+    allow_real_llm_calls: bool = False
+    eval_max_cases: int = 3
 
     # Per-call budgets for the real adapter (T15). Mock mode ignores all of these.
     llm_timeout_seconds: float = 30.0

@@ -111,6 +111,17 @@ embeddings = build_embedding_provider(settings)
 
 The real adapter is **not verified against a live provider** — no API key exists in this environment (Gate H2) and a real call would incur paid usage. Its request shaping and every failure path *are* covered, via `httpx.MockTransport`.
 
+### Evaluations (T20)
+
+```bash
+make eval-mock    # offline, no API key, no cost. The default.
+make eval-real    # BILLABLE. Refuses unless Gate H2 is genuinely set up.
+```
+
+Paid usage needs **two** switches: `AI_MODE=real` *and* `ALLOW_REAL_LLM_CALLS=true`. The second exists only to make spending deliberate — real mode alone will not call a provider, because a copied `.env` should not be able to start a bill. `EVAL_MAX_CASES` caps a real run.
+
+Reports record the provider's own token counts and model id. Cost is **null** unless you set `LLM_INPUT_COST_PER_MTOK`/`LLM_OUTPUT_COST_PER_MTOK`; no price table ships, since prices change and a stale one reads as fact. See `evals/README.md` for exactly what a real run transmits.
+
 ## Docker
 
 `Dockerfile` builds a non-root, `uv`-managed image. **Not yet build-verified** — Docker isn't installed in the environment this ticket was implemented in (see `docs/PROGRESS.md` T03, same Gate H0 as T01/T02). Verify with `docker build .` once Docker is available.

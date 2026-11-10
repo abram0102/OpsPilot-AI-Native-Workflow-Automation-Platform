@@ -37,6 +37,7 @@ from opspilot_agent.providers.errors import (
 from opspilot_agent.providers.redaction import redact
 from opspilot_agent.providers.resilience import CircuitBreaker, RetryPolicy
 from opspilot_agent.providers.tokens import enforce_input_budget
+from opspilot_agent.providers.usage import UsageLedger, usage_from_response
 
 _MAX_ERROR_BODY_CHARS = 500
 """Provider error bodies are echoed into our own error message; cap and scrub them first."""
@@ -51,12 +52,16 @@ class _HttpProviderBase:
         api_key: SecretStr,
         retry: RetryPolicy,
         breaker: CircuitBreaker,
+        usage_ledger: UsageLedger | None = None,
     ) -> None:
         self._client = client
         self._model_id = model_id
         self._api_key = api_key
         self._retry = retry
         self._breaker = breaker
+        # Optional: a run supplies one to collect what its calls actually cost (T20). Absent
+        # here, nothing is recorded — the adapter never invents usage it was not told.
+        self._usage_ledger = usage_ledger
 
     @property
     def model_id(self) -> str:
@@ -148,6 +153,10 @@ class HttpLLMProvider(_HttpProviderBase):
         }
 
         body = await self._call("/chat/completions", payload, timeout_s)
+        if self._usage_ledger is not None:
+            self._usage_ledger.record(
+                usage_from_response(body, kind="chat", requested_model=self._model_id)
+            )
         return _parse_structured_output(body, schema)
 
 
@@ -168,6 +177,10 @@ class HttpEmbeddingProvider(_HttpProviderBase):
 
         payload = {"model": self._model_id, "input": texts}
         body = await self._call("/embeddings", payload, timeout_s)
+        if self._usage_ledger is not None:
+            self._usage_ledger.record(
+                usage_from_response(body, kind="embedding", requested_model=self._model_id)
+            )
         return self._parse_embeddings(body, expected_count=len(texts))
 
     def _parse_embeddings(self, body: dict[str, Any], *, expected_count: int) -> list[list[float]]:

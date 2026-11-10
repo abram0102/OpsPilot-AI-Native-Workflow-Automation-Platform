@@ -372,4 +372,20 @@ A detail the acceptance criterion forced: the trace must record a blocked attemp
 
 **Two test-fixture gaps fixed in passing.** `conftest.py`'s TRUNCATE list, written in T16, omitted `tickets`, `customers` and every `agent_*` table, so graph tests would have leaked rows into each other. Each table is now named explicitly rather than relying on cascades, so the next addition is less likely to be forgotten the same way.
 
+## ADR-044 — T20: two locks on paid usage, and why no price table ships
+
+Status: **Accepted**, 2026-11-10. T20 remains **BLOCKED** on Gate H2 — see docs/PROGRESS.md.
+
+**Paid usage needs two independent switches, not one.** AGENTS.md rule 15 requires "the human's explicit authorization" before incurring paid API usage. `AI_MODE=real` cannot be that authorization: it is a routine configuration value that a copied `.env`, an inherited shell or a misconfigured deployment could set, and none of those is a human deciding to spend money. So `ALLOW_REAL_LLM_CALLS` exists for exactly this purpose and has no other effect anywhere in the system — real mode alone will not call a provider. `make eval-real` also refuses when `AI_MODE=real` is set but `--real` was not passed, because guessing which the operator meant is the one thing a billable command must not do.
+
+**The refusal is a deliverable, not an error path.** T20's acceptance requires that without H2 "real eval refuses with meaningful setup instructions". Running without Gate H2 is the normal state of this repository, so the refusal reports *every* missing requirement at once rather than the first — an operator deserves the whole checklist, not three consecutive failures each revealing one more item — and states the case cap and how to get cost reporting before they ask.
+
+**No price table ships, and cost is null by default.** This is the ticket's sharpest honesty requirement: "actual model/date/cost recorded, **not made up**". Prices change per model, region and contract, and cannot be verified from inside this process, so a hardcoded table would be a number that looks authoritative and quietly goes stale. Cost therefore appears only when an operator sets `LLM_INPUT_COST_PER_MTOK`/`LLM_OUTPUT_COST_PER_MTOK` to their own rates; otherwise the report records a null cost alongside real token counts. A null cost is a true statement about what the run knows.
+
+For the same reason, **token counts come from the provider's own `usage` block**, never from T15's `estimate_tokens` — that heuristic is explicitly a request-size guard rail (ADR-039), and reporting it as usage would be a fabricated metric. When a provider returns no `usage` block the counts are recorded as *unknown* rather than zero, and `UsageLedger` refuses to produce any total at all in that case: summing unknowns and presenting the result as measured is precisely what AGENTS.md rule 6 forbids. The model id is likewise read back from the response, since a provider may serve a different snapshot than the alias requested.
+
+**What leaves the machine is documented and fictional.** `evals/README.md` lists exactly what a real run transmits: three invented smoke tickets, one fictional FAQ excerpt and the two version-controlled prompts. The evaluation deliberately reads nothing from the database, so running it cannot send a tenant's real content to a provider — which is what makes "appropriate for synthetic demo text" (Gate H2 step 2) a claim about this code rather than a hope.
+
+**Scope.** The smoke evaluation exercises the provider layer — typed classification, a drafted reply, citations over a supplied excerpt — without a database, a run row or the graph. T19 already covers the graph end to end against Postgres; the question this answers is the different one of whether a real provider returns output this system can use. The scored 60+ case dataset and its metrics remain T30's.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

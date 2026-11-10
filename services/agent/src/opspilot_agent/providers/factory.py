@@ -15,10 +15,14 @@ from opspilot_agent.providers.http import HttpEmbeddingProvider, HttpLLMProvider
 from opspilot_agent.providers.mock import MockEmbeddingProvider, MockLLMProvider
 from opspilot_agent.providers.protocols import EmbeddingProvider, LLMProvider
 from opspilot_agent.providers.resilience import CircuitBreaker, RetryPolicy
+from opspilot_agent.providers.usage import UsageLedger
 
 
 def build_llm_provider(
-    settings: Settings, *, client: httpx.AsyncClient | None = None
+    settings: Settings,
+    *,
+    client: httpx.AsyncClient | None = None,
+    usage_ledger: UsageLedger | None = None,
 ) -> LLMProvider:
     if settings.ai_mode is AiMode.MOCK:
         return MockLLMProvider()
@@ -31,11 +35,15 @@ def build_llm_provider(
         retry=_build_retry(settings),
         breaker=_build_breaker(settings),
         max_input_tokens=settings.agent_max_input_tokens,
+        usage_ledger=usage_ledger,
     )
 
 
 def build_embedding_provider(
-    settings: Settings, *, client: httpx.AsyncClient | None = None
+    settings: Settings,
+    *,
+    client: httpx.AsyncClient | None = None,
+    usage_ledger: UsageLedger | None = None,
 ) -> EmbeddingProvider:
     if settings.ai_mode is AiMode.MOCK:
         return MockEmbeddingProvider(dimensions=settings.embedding_dimensions)
@@ -48,6 +56,7 @@ def build_embedding_provider(
         retry=_build_retry(settings),
         breaker=_build_breaker(settings),
         dimensions=settings.embedding_dimensions,
+        usage_ledger=usage_ledger,
     )
 
 
