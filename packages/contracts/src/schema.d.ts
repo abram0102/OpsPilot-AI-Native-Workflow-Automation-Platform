@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organizations/{orgId}/tickets/{ticketId}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request an agent run for a ticket */
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organizations/{orgId}/tickets/{ticketId}/messages": {
         parameters: {
             query?: never;
@@ -67,6 +84,23 @@ export interface paths {
         put?: never;
         /** Post a human-authored internal message */
         post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an agent run */
+        post: operations["cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -189,6 +223,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organizations/{orgId}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List agent runs */
+        get: operations["list_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one agent run */
+        get: operations["get_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{orgId}/runs/{runId}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a run's sanitized trace steps */
+        get: operations["listSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organizations/{orgId}/members": {
         parameters: {
             query?: never;
@@ -213,7 +298,7 @@ export interface paths {
             cookie?: never;
         };
         /** List an organization's knowledge documents */
-        get: operations["list_2"];
+        get: operations["list_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -230,7 +315,7 @@ export interface paths {
             cookie?: never;
         };
         /** A knowledge document's status and metadata */
-        get: operations["get_2"];
+        get: operations["get_3"];
         put?: never;
         post?: never;
         /** Delete a knowledge document and its stored object */
@@ -308,6 +393,17 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        StartRunRequest: {
+            /** @enum {string} */
+            workflow: "SUPPORT_TRIAGE_V1";
+        };
+        StartRunResponse: {
+            /** Format: uuid */
+            runId?: string;
+            /** @enum {string} */
+            status?: "QUEUED" | "RUNNING" | "AWAITING_APPROVAL" | "RETRY_SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED";
+            pollUrl?: string;
+        };
         CreateTicketMessageRequest: {
             body: string;
         };
@@ -325,6 +421,31 @@ export interface components {
             sourceRunId?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        AgentRunDetailResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ticketId?: string;
+            /** @enum {string} */
+            workflow?: "SUPPORT_TRIAGE_V1";
+            /** @enum {string} */
+            status?: "QUEUED" | "RUNNING" | "AWAITING_APPROVAL" | "RETRY_SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED";
+            /** Format: uuid */
+            initiatedBy?: string;
+            /** Format: int32 */
+            attemptCount?: number;
+            /** Format: int32 */
+            stepsUsed?: number;
+            /** Format: int32 */
+            totalInputTokens?: number;
+            /** Format: int32 */
+            totalOutputTokens?: number;
+            lastErrorCode?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
         CreateUploadSessionRequest: {
             filename: string;
@@ -437,6 +558,55 @@ export interface components {
             tags?: string[];
             /** Format: int64 */
             messageCount?: number;
+        };
+        AgentRunPageResponse: {
+            items?: components["schemas"]["AgentRunResponse"][];
+            nextCursor?: string;
+        };
+        AgentRunResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ticketId?: string;
+            /** @enum {string} */
+            workflow?: "SUPPORT_TRIAGE_V1";
+            /** @enum {string} */
+            status?: "QUEUED" | "RUNNING" | "AWAITING_APPROVAL" | "RETRY_SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED";
+            /** Format: int32 */
+            attemptCount?: number;
+            /** Format: int32 */
+            stepsUsed?: number;
+            lastErrorCode?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        AgentStepPageResponse: {
+            items?: components["schemas"]["AgentStepResponse"][];
+            nextCursor?: string;
+        };
+        AgentStepResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: int32 */
+            sequence?: number;
+            /** @enum {string} */
+            stepType?: "CLASSIFY" | "RETRIEVE" | "DRAFT_REPLY" | "PROPOSE_TOOL" | "AWAIT_APPROVAL" | "EXECUTE_TOOL" | "FINALIZE";
+            /** @enum {string} */
+            status?: "STARTED" | "SUCCEEDED" | "FAILED" | "SKIPPED";
+            sanitizedInput?: string;
+            sanitizedOutput?: string;
+            /** Format: int32 */
+            durationMs?: number;
+            model?: string;
+            /** Format: int32 */
+            tokensIn?: number;
+            /** Format: int32 */
+            tokensOut?: number;
+            errorCode?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         MeResponse: {
             /** Format: uuid */
@@ -560,6 +730,35 @@ export interface operations {
             };
         };
     };
+    start: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                orgId: string;
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["StartRunResponse"];
+                };
+            };
+        };
+    };
     list_1: {
         parameters: {
             query?: never;
@@ -606,6 +805,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["TicketMessageResponse"];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AgentRunDetailResponse"];
                 };
             };
         };
@@ -808,6 +1030,81 @@ export interface operations {
             };
         };
     };
+    list_2: {
+        parameters: {
+            query?: {
+                status?: "QUEUED" | "RUNNING" | "AWAITING_APPROVAL" | "RETRY_SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AgentRunPageResponse"];
+                };
+            };
+        };
+    };
+    get_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AgentRunDetailResponse"];
+                };
+            };
+        };
+    };
+    listSteps: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                orgId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AgentStepPageResponse"];
+                };
+            };
+        };
+    };
     members: {
         parameters: {
             query?: never;
@@ -830,7 +1127,7 @@ export interface operations {
             };
         };
     };
-    list_2: {
+    list_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -852,7 +1149,7 @@ export interface operations {
             };
         };
     };
-    get_2: {
+    get_3: {
         parameters: {
             query?: never;
             header?: never;

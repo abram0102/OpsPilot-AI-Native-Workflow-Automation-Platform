@@ -160,6 +160,59 @@
         }
       }
     },
+    "/api/v1/organizations/{orgId}/tickets/{ticketId}/runs" : {
+      "post" : {
+        "tags" : [ "Agent runs" ],
+        "summary" : "Request an agent run for a ticket",
+        "operationId" : "start",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "ticketId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/StartRunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StartRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/organizations/{orgId}/tickets/{ticketId}/messages" : {
       "get" : {
         "tags" : [ "Ticket messages" ],
@@ -236,6 +289,42 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/TicketMessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/runs/{runId}/cancel" : {
+      "post" : {
+        "tags" : [ "Agent runs" ],
+        "summary" : "Cancel an agent run",
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AgentRunDetailResponse"
                 }
               }
             }
@@ -534,6 +623,144 @@
         }
       }
     },
+    "/api/v1/organizations/{orgId}/runs" : {
+      "get" : {
+        "tags" : [ "Agent runs" ],
+        "summary" : "List agent runs",
+        "operationId" : "list_2",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "AWAITING_APPROVAL", "RETRY_SCHEDULED", "COMPLETED", "FAILED", "CANCELLED" ]
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AgentRunPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/runs/{runId}" : {
+      "get" : {
+        "tags" : [ "Agent runs" ],
+        "summary" : "Get one agent run",
+        "operationId" : "get_2",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AgentRunDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/organizations/{orgId}/runs/{runId}/steps" : {
+      "get" : {
+        "tags" : [ "Agent runs" ],
+        "summary" : "List a run's sanitized trace steps",
+        "operationId" : "listSteps",
+        "parameters" : [ {
+          "name" : "orgId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "runId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AgentStepPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/organizations/{orgId}/members" : {
       "get" : {
         "tags" : [ "organization-controller" ],
@@ -568,7 +795,7 @@
       "get" : {
         "tags" : [ "Knowledge" ],
         "summary" : "List an organization's knowledge documents",
-        "operationId" : "list_2",
+        "operationId" : "list_3",
         "parameters" : [ {
           "name" : "orgId",
           "in" : "path",
@@ -599,7 +826,7 @@
       "get" : {
         "tags" : [ "Knowledge" ],
         "summary" : "A knowledge document's status and metadata",
-        "operationId" : "get_2",
+        "operationId" : "get_3",
         "parameters" : [ {
           "name" : "orgId",
           "in" : "path",
@@ -798,6 +1025,32 @@
           }
         }
       },
+      "StartRunRequest" : {
+        "type" : "object",
+        "properties" : {
+          "workflow" : {
+            "type" : "string",
+            "enum" : [ "SUPPORT_TRIAGE_V1" ]
+          }
+        },
+        "required" : [ "workflow" ]
+      },
+      "StartRunResponse" : {
+        "type" : "object",
+        "properties" : {
+          "runId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "AWAITING_APPROVAL", "RETRY_SCHEDULED", "COMPLETED", "FAILED", "CANCELLED" ]
+          },
+          "pollUrl" : {
+            "type" : "string"
+          }
+        }
+      },
       "CreateTicketMessageRequest" : {
         "type" : "object",
         "properties" : {
@@ -835,6 +1088,58 @@
             "format" : "uuid"
           },
           "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "AgentRunDetailResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ticketId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "workflow" : {
+            "type" : "string",
+            "enum" : [ "SUPPORT_TRIAGE_V1" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "AWAITING_APPROVAL", "RETRY_SCHEDULED", "COMPLETED", "FAILED", "CANCELLED" ]
+          },
+          "initiatedBy" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "attemptCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stepsUsed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalInputTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalOutputTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lastErrorCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
             "type" : "string",
             "format" : "date-time"
           }
@@ -1111,6 +1416,123 @@
           "messageCount" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }
+      },
+      "AgentRunPageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AgentRunResponse"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AgentRunResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ticketId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "workflow" : {
+            "type" : "string",
+            "enum" : [ "SUPPORT_TRIAGE_V1" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "AWAITING_APPROVAL", "RETRY_SCHEDULED", "COMPLETED", "FAILED", "CANCELLED" ]
+          },
+          "attemptCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stepsUsed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lastErrorCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "AgentStepPageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AgentStepResponse"
+            }
+          },
+          "nextCursor" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AgentStepResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "sequence" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stepType" : {
+            "type" : "string",
+            "enum" : [ "CLASSIFY", "RETRIEVE", "DRAFT_REPLY", "PROPOSE_TOOL", "AWAIT_APPROVAL", "EXECUTE_TOOL", "FINALIZE" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "STARTED", "SUCCEEDED", "FAILED", "SKIPPED" ]
+          },
+          "sanitizedInput" : {
+            "type" : "string"
+          },
+          "sanitizedOutput" : {
+            "type" : "string"
+          },
+          "durationMs" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "tokensIn" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "tokensOut" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
           }
         }
       },
