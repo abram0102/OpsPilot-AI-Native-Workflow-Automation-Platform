@@ -23,6 +23,13 @@ app:
     # same process generates for itself (TestIssuerConfig) and nothing
     # resembling it can reach a real deployment (ProductionSafetyGuard).
     allow-test-issuer: ${API_ALLOW_TEST_ISSUER:true}
+    # T21: a known local-only secret, so local development and the test suite can mint service
+    # tokens without any setup. ProductionSafetyGuard refuses to start if this value is ever
+    # seen under the 'production' profile — it is published in this repository, so anyone could
+    # mint a worker token with it.
+    internal-service:
+      signing-secret: >-
+        ${INTERNAL_SERVICE_SIGNING_SECRET:local-development-only-internal-service-secret-not-for-production}
 
 logging:
   level:

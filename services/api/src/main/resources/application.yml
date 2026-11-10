@@ -21,6 +21,12 @@ app:
     # Default false (safe); local profile turns it on. ProductionSafetyGuard
     # refuses to start if this is ever true under the "production" profile.
     allow-test-issuer: ${API_ALLOW_TEST_ISSUER:false}
+  # T21: the machine-only internal action API. A distinct audience and a distinct signing key,
+  # so a user's browser token cannot reach /internal/** even by accident — the two filter chains
+  # validate against different decoders entirely (docs/DECISIONS.md ADR-045).
+  internal-service:
+    audience: ${INTERNAL_SERVICE_AUDIENCE:https://internal.opspilot.local}
+    signing-secret: ${INTERNAL_SERVICE_SIGNING_SECRET:}
   invitations:
     # ISO-8601 duration. No invitation email is sent in V1 (docs/TASKS.md T09); the token is
     # shown once, to the owner/admin who created it, via a protected response.
@@ -31,8 +37,13 @@ app:
 # document the test-only fixture controllers under /__test/** (TestEchoController and friends,
 # component-scanned because they live under com.opspilot.* on the test classpath) — confirmed as
 # a real bug via the bootstrap run, not a hypothetical (docs/DECISIONS.md ADR-033).
+# /internal/** is excluded for the same reason as /__test/**, not for convenience: this spec
+# generates the *browser* TS client, and the internal action API is one no browser may ever call
+# (docs/API_CONTRACT.md: "reject normal browser/user tokens"). Publishing it into the frontend's
+# type surface would advertise the exact mistake the audience split exists to prevent. A test
+# asserts the exclusion holds rather than trusting this line (docs/DECISIONS.md ADR-045).
 springdoc:
-  paths-to-exclude: /__test/**
+  paths-to-exclude: /__test/**,/internal/**
 
 # T13: local filesystem adapter by default; S3 only when storage.provider=s3 (Gate H3 — a real
 # AWS bucket/credentials, not needed for this provider's default). .env.example documents these

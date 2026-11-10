@@ -4,6 +4,8 @@ import com.opspilot.auth.PrincipalResolvingJwtAuthenticationConverter;
 import com.opspilot.auth.UserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
@@ -23,7 +25,13 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration
 public class SecurityConfig {
 
+  /**
+   * The user-facing chain. Explicitly ordered after {@link InternalServiceSecurityConfig}'s, so its
+   * {@code anyRequest()} cannot claim {@code /internal/**} — an implicit ordering would leave that
+   * depending on bean discovery order, which is not a thing to rest an audience split on.
+   */
   @Bean
+  @Order(Ordered.HIGHEST_PRECEDENCE + 20)
   SecurityFilterChain securityFilterChain(
       HttpSecurity http, JwtDecoder jwtDecoder, UserRepository users, ObjectMapper objectMapper)
       throws Exception {

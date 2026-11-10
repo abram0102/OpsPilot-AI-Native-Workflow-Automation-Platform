@@ -54,4 +54,24 @@ class OpenApiSpecDriftTest {
                 + " `make generate-contracts`, review the diff, and commit it.")
         .isEqualTo(live);
   }
+
+  /**
+   * The private internal API must never reach the browser's typed client (T21/ADR-045).
+   *
+   * <p>`springdoc.paths-to-exclude` is a line in a config file that a future edit could widen or
+   * reorder without anyone noticing. This asserts the outcome instead: whatever that setting says,
+   * no {@code /internal/} path is in the spec that generates `apps/web`'s client. Publishing one
+   * would advertise to the frontend an endpoint its tokens are specifically built to be rejected
+   * from.
+   */
+  @Test
+  void theSpecNeverDocumentsThePrivateInternalApi() throws Exception {
+    JsonNode live = objectMapper.readTree(OpenApiSpecs.fetchLiveSpec(mockMvc, testIssuerKeyPair));
+
+    JsonNode paths = live.get("paths");
+    assertThat(paths).isNotNull();
+    assertThat(paths.propertyNames())
+        .as("the browser's contract must not document the machine-only internal API")
+        .noneMatch(path -> path.startsWith("/internal"));
+  }
 }

@@ -15,13 +15,38 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProductionSafetyGuard {
 
+  /**
+   * Internal-service secrets that are committed to this repository.
+   *
+   * <p>Both are published, so either one in production would mean anyone reading the source could
+   * mint a worker token for the internal action API. Listed explicitly rather than pattern-matched
+   * so adding another development default is a deliberate edit here too.
+   */
+  private static final java.util.Set<String> PUBLISHED_INTERNAL_SECRETS =
+      java.util.Set.of(
+          "replace-with-a-local-only-test-secret",
+          "local-development-only-internal-service-secret-not-for-production");
+
   public ProductionSafetyGuard(
       Environment environment,
-      @Value("${app.security.allow-test-issuer:false}") boolean allowTestIssuer) {
-    if (allowTestIssuer && environment.acceptsProfiles(Profiles.of("production"))) {
+      @Value("${app.security.allow-test-issuer:false}") boolean allowTestIssuer,
+      @Value("${app.security.internal-service.signing-secret:}") String internalSigningSecret) {
+    boolean production = environment.acceptsProfiles(Profiles.of("production"));
+
+    if (allowTestIssuer && production) {
       throw new IllegalStateException(
           "app.security.allow-test-issuer=true is not allowed under the 'production' profile."
               + " Refusing to start.");
+    }
+
+    // T21: the example secret is committed to this repository, so a production instance running
+    // on it would be accepting worker tokens anyone could mint. Same reasoning as the test
+    // issuer — fail at startup rather than serve one request with it.
+    if (production && PUBLISHED_INTERNAL_SECRETS.contains(internalSigningSecret)) {
+      throw new IllegalStateException(
+          "app.security.internal-service.signing-secret is a development default committed to"
+              + " this repository, so it is public. Refusing to start under the 'production'"
+              + " profile.");
     }
   }
 }

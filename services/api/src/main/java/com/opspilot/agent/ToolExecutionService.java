@@ -88,6 +88,23 @@ public class ToolExecutionService {
     return executions.saveAndFlush(execution);
   }
 
+  /**
+   * Authorises an action that policy permits without a human.
+   *
+   * <p>{@code AUTHORIZED} means "permitted to execute", and a safe internal action is permitted by
+   * deterministic policy rather than by an approval — so it still passes through this state rather
+   * than skipping to {@code EXECUTING}, keeping one transition table true for every action.
+   *
+   * <p>Callers must have checked policy first; this method deliberately does not re-derive it,
+   * because the policy decision belongs to the caller that knows the action's arguments.
+   */
+  @Transactional
+  public ToolExecution authorizeWithoutApproval(UUID organizationId, UUID executionId) {
+    ToolExecution execution = require(organizationId, executionId);
+    transitionTo(execution, ToolExecutionStatus.AUTHORIZED, null);
+    return executions.saveAndFlush(execution);
+  }
+
   @Transactional
   public ToolExecution transition(
       UUID organizationId, UUID executionId, ToolExecutionStatus next, String resultRef) {
