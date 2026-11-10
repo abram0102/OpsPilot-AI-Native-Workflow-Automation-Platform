@@ -56,7 +56,25 @@ src/opspilot_agent/
 tests/
 ```
 
-`worker`, `graphs`, `tools`, `telemetry` (per `AGENTS.md`'s expected layout) are added by the tickets that need them (T19, T25, T30), not speculatively ahead of time.
+`worker`, `tools`, `telemetry` (per `AGENTS.md`'s expected layout) are added by the tickets that need them (T25, T30), not speculatively ahead of time.
+
+## The triage graph (T19)
+
+```
+load_ticket → classify → retrieve_knowledge → draft_reply → propose_actions → policy_gate → finalize
+```
+
+A straight line with no cycles — "no open-ended recursive loops" is guaranteed by a graph that cannot loop, not by a step counter alone (though steps, tokens and wall-clock time are all bounded too, each failing the run with its own code).
+
+```bash
+# Execute one run (stand-in for the T25 Redis consumer)
+uv run python -m opspilot_agent.graphs.handler \
+  --organization-id <uuid> --run-id <uuid> --ticket-id <uuid>
+```
+
+**The graph executes nothing.** `policy_gate` classifies each proposal as `AUTO_EXECUTE`, `REQUIRE_APPROVAL` or `REJECT`; a risky write leaves the run `AWAITING_APPROVAL` for a human. Executing an action needs T21's internal API, and publishing a reply needs an approval id only T22 can mint.
+
+`graphs/policy.py` is deterministic code with no model in the loop, and is the component worth reading first: it is where "AI cannot choose which permissions it has" is actually enforced. State is checkpointed to Postgres under `thread_id = agent_runs.id`; those tables belong to the checkpointer rather than Flyway (`docs/DATA_MODEL.md`, ADR-043).
 
 ## Knowledge indexing and retrieval (T16)
 

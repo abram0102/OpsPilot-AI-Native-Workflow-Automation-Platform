@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     agent_max_input_tokens: int = 8000
     agent_max_output_tokens: int = 2000
     agent_tool_timeout_seconds: int = 30
+    # T19 bounds a run by steps, tokens *and* time. The first two had settings already; the data
+    # model and architecture both ask for a time budget without naming one, so this is it.
+    agent_max_run_seconds: float = 120.0
 
     redis_host: str = "localhost"
     redis_port: int = 6379

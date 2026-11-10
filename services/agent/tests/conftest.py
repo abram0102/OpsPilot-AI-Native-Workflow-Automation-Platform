@@ -85,9 +85,14 @@ def db_connection(migrated_database: str) -> Iterator[object]:
 
     with psycopg.connect(migrated_database) as connection:
         with connection.cursor() as cursor:
+            # Everything a test can create, or rows leak between tests. `organizations` and
+            # `users` cascade to most of the rest, but naming each table keeps a new one from
+            # being silently forgotten the way the agent tables were when T16 wrote this list.
             cursor.execute(
-                "TRUNCATE knowledge_chunks, knowledge_documents, memberships, "
-                "organizations, users RESTART IDENTITY CASCADE"
+                "TRUNCATE agent_usage, tool_executions, approvals, agent_steps, agent_runs, "
+                "ticket_tags, ticket_messages, tickets, customers, knowledge_chunks, "
+                "knowledge_documents, memberships, organizations, users "
+                "RESTART IDENTITY CASCADE"
             )
         connection.commit()
         yield connection
@@ -126,6 +131,70 @@ def insert_user(connection, email: str = "owner@example.test") -> UUID:
         )
     connection.commit()
     return user_id
+
+
+def insert_customer(connection, *, organization_id: UUID, name: str = "Ada") -> UUID:
+    customer_id = uuid4()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO customers (id, organization_id, display_name, email) VALUES (%s,%s,%s,%s)",
+            (customer_id, organization_id, name, f"{customer_id}@example.test"),
+        )
+    connection.commit()
+    return customer_id
+
+
+def insert_ticket(
+    connection,
+    *,
+    organization_id: UUID,
+    created_by: UUID,
+    subject: str = "Where is my order?",
+    description: str = "It has not arrived.",
+    priority: str = "MEDIUM",
+) -> UUID:
+    customer_id = insert_customer(connection, organization_id=organization_id)
+    ticket_id = uuid4()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO tickets (id, organization_id, customer_id, subject, description,
+                                 priority, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                ticket_id,
+                organization_id,
+                customer_id,
+                subject,
+                description,
+                priority,
+                created_by,
+            ),
+        )
+    connection.commit()
+    return ticket_id
+
+
+def insert_run(
+    connection,
+    *,
+    organization_id: UUID,
+    ticket_id: UUID,
+    initiated_by: UUID,
+    status: str = "QUEUED",
+) -> UUID:
+    run_id = uuid4()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO agent_runs (id, organization_id, ticket_id, initiated_by, status, workflow)
+            VALUES (%s, %s, %s, %s, %s, 'SUPPORT_TRIAGE_V1')
+            """,
+            (run_id, organization_id, ticket_id, initiated_by, status),
+        )
+    connection.commit()
+    return run_id
 
 
 def insert_document(
