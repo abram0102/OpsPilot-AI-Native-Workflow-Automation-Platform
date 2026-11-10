@@ -21,6 +21,10 @@ public enum OrganizationAction {
   UPLOAD_KNOWLEDGE(MembershipRole.MEMBER),
   DELETE_KNOWLEDGE(MembershipRole.ADMIN),
   RUN_AGENT(MembershipRole.MEMBER),
+  /**
+   * Reading runs, their steps and their usage — docs/API_CONTRACT.md gives these to member/viewer.
+   */
+  VIEW_RUNS(MembershipRole.VIEWER),
   DECIDE_APPROVAL(MembershipRole.ADMIN),
   MANAGE_MEMBERS(MembershipRole.ADMIN),
   MANAGE_INVITATIONS(MembershipRole.ADMIN),

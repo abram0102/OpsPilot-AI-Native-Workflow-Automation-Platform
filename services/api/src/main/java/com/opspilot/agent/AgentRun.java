@@ -68,6 +68,10 @@ public class AgentRun {
   @Column(name = "idempotency_key")
   private String idempotencyKey;
 
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  private Workflow workflow = Workflow.SUPPORT_TRIAGE_V1;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -78,10 +82,16 @@ public class AgentRun {
 
   protected AgentRun() {}
 
-  public AgentRun(UUID organizationId, UUID ticketId, UUID initiatedBy, String idempotencyKey) {
+  public AgentRun(
+      UUID organizationId,
+      UUID ticketId,
+      UUID initiatedBy,
+      Workflow workflow,
+      String idempotencyKey) {
     this.organizationId = organizationId;
     this.ticketId = ticketId;
     this.initiatedBy = initiatedBy;
+    this.workflow = workflow;
     this.idempotencyKey = idempotencyKey;
   }
 
@@ -139,6 +149,10 @@ public class AgentRun {
 
   public String getIdempotencyKey() {
     return idempotencyKey;
+  }
+
+  public Workflow getWorkflow() {
+    return workflow;
   }
 
   public Instant getCreatedAt() {

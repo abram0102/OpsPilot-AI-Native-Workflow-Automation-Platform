@@ -78,6 +78,14 @@ public class GlobalExceptionHandler {
     return respond(HttpStatus.CONFLICT, "STATE_CONFLICT", ex.getMessage(), List.of(), request);
   }
 
+  /** Same 409 as a state conflict, but its own stable code — clients branch on the code. */
+  @ExceptionHandler(IdempotencyConflictException.class)
+  public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(
+      IdempotencyConflictException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", ex.getMessage(), List.of(), request);
+  }
+
   @ExceptionHandler(BadRequestException.class)
   public ResponseEntity<ApiErrorResponse> handleBadRequest(
       BadRequestException ex, HttpServletRequest request) {

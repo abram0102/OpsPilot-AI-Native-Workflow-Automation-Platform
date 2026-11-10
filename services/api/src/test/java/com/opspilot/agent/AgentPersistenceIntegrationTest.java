@@ -76,7 +76,8 @@ class AgentPersistenceIntegrationTest {
   }
 
   private AgentRun newRun() {
-    return runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, null));
+    return runs.saveAndFlush(
+        new AgentRun(orgId, ticketId, userId, Workflow.SUPPORT_TRIAGE_V1, null));
   }
 
   @Test
@@ -586,18 +587,22 @@ class AgentPersistenceIntegrationTest {
 
   @Test
   void twoRunsInOneOrganizationCannotShareAnIdempotencyKey() {
-    runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, "key-1"));
+    runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, Workflow.SUPPORT_TRIAGE_V1, "key-1"));
 
     // T18's "double-click start with same idempotency key gives one run", enforced in schema.
-    assertThatThrownBy(() -> runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, "key-1")))
+    assertThatThrownBy(() ->
+            runs.saveAndFlush(
+                new AgentRun(orgId, ticketId, userId, Workflow.SUPPORT_TRIAGE_V1, "key-1")))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
   void runsWithoutAKeyDoNotCollide() {
-    runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, null));
+    runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, Workflow.SUPPORT_TRIAGE_V1, null));
 
-    assertThatCode(() -> runs.saveAndFlush(new AgentRun(orgId, ticketId, userId, null)))
+    assertThatCode(() ->
+            runs.saveAndFlush(
+                new AgentRun(orgId, ticketId, userId, Workflow.SUPPORT_TRIAGE_V1, null)))
         .doesNotThrowAnyException();
   }
 

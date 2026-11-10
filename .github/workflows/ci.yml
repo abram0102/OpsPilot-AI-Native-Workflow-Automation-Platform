@@ -66,6 +66,17 @@ jobs:
           cache-dependency-path: services/api/pom.xml
       - name: Format check (Spotless)
         run: ./mvnw -B -q spotless:check
+      # TEMPORARY (T18) — removed in the follow-up commit once the regenerated spec is committed.
+      # Gate H0 means there is no local Docker to run OpenApiSpecGenerator, so the spec is
+      # generated here and read back out of the build log. Note that while this step exists, the
+      # OpenApiSpecDriftTest in "Build and test" below compares against the file this step just
+      # rewrote on disk, so a green run here is NOT evidence the committed spec is current.
+      - name: Bootstrap OpenAPI spec (temporary, remove after first commit)
+        run: |
+          ./mvnw -B -q test -Dtest=OpenApiSpecGenerator
+          echo "===OPENAPI_JSON_START==="
+          cat ../../packages/contracts/openapi.json
+          echo "===OPENAPI_JSON_END==="
       # Full suite, including the Testcontainers-backed ApiApplicationTests —
       # GitHub-hosted ubuntu runners ship Docker, so this (correctly) runs
       # here even though it can't run in every local dev environment

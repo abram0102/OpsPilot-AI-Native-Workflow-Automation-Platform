@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,4 +35,41 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
       """)
   List<AgentRun> findClaimable(
       @Param("statuses") List<AgentRunStatus> statuses, @Param("now") Instant now);
+
+  /**
+   * First page of the run explorer, newest first.
+   *
+   * <p>Split from {@link #findPageAfter} for the same reason the ticket queries are (see {@code
+   * TicketRepository}): binding a null {@code Instant} whose only textual occurrence is an {@code
+   * IS NULL} check gives Postgres no column to infer a type from, and it rejects the query
+   * outright. A nullable *enum* filter is fine in both, which is why {@code status} stays in one
+   * place.
+   */
+  @Query(
+      """
+      SELECT r FROM AgentRun r
+       WHERE r.organizationId = :organizationId
+         AND (:status IS NULL OR r.status = :status)
+       ORDER BY r.createdAt DESC, r.id DESC
+      """)
+  List<AgentRun> findFirstPage(
+      @Param("organizationId") UUID organizationId,
+      @Param("status") AgentRunStatus status,
+      Pageable pageable);
+
+  @Query(
+      """
+      SELECT r FROM AgentRun r
+       WHERE r.organizationId = :organizationId
+         AND (:status IS NULL OR r.status = :status)
+         AND (r.createdAt < :cursorCreatedAt
+              OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId))
+       ORDER BY r.createdAt DESC, r.id DESC
+      """)
+  List<AgentRun> findPageAfter(
+      @Param("organizationId") UUID organizationId,
+      @Param("status") AgentRunStatus status,
+      @Param("cursorCreatedAt") Instant cursorCreatedAt,
+      @Param("cursorId") UUID cursorId,
+      Pageable pageable);
 }
