@@ -415,6 +415,11 @@ class TestGraphShape:
             "draft_reply",
             "propose_actions",
             "policy_gate",
+            # T23's pause branch. Still strictly forward — the approval gate adds nodes, not a
+            # loop, so "no open-ended recursive loops" holds for the same structural reason.
+            "persist_approval",
+            "await_approval",
+            "execute_approved_action",
             "finalize",
             "__end__",
         ]

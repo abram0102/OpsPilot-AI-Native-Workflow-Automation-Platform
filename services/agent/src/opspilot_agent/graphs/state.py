@@ -73,6 +73,14 @@ class TriageState(TypedDict, total=False):
     proposals: list[ProposalRecord]
     approval_required: bool
 
+    # persist_approval / await_approval / execute_approved_action
+    approval_id: str
+    approval_tool_call_id: str
+    resume_decision: str
+    approval_outcome: str
+    published_reference: str | None
+    already_applied: bool
+
     # finalize
     terminal_status: str
     error_code: str | None

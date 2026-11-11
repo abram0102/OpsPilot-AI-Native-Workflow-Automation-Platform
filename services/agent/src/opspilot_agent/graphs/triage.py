@@ -30,10 +30,19 @@ from uuid import UUID
 
 import psycopg
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
 
+from opspilot_agent.clients.internal_actions import InternalActionClient
 from opspilot_agent.config import Settings
+from opspilot_agent.graphs.approvals import (
+    ApprovalStatus,
+    ResumeDecision,
+    persist_pending_approval,
+    read_approval,
+)
 from opspilot_agent.graphs.policy import GatedProposal, PolicyDecision, gate
 from opspilot_agent.graphs.state import Citation, ProposalRecord, TriageState
+from opspilot_agent.graphs.trace import set_run_status
 from opspilot_agent.knowledge.retrieval import search_knowledge
 from opspilot_agent.prompts import PromptName, load_prompt
 from opspilot_agent.providers.protocols import EmbeddingProvider, LLMProvider
@@ -75,6 +84,9 @@ class TriageContext:
     llm: LLMProvider
     embeddings: EmbeddingProvider
     started_at: float
+    # Only used downstream of the interrupt. Optional so a run that proposes nothing publishable
+    # needs no client at all, and so tests can supply one driven by a mock transport.
+    internal_actions: InternalActionClient | None = None
 
     def check_bounds(self, state: TriageState) -> None:
         """Raises as soon as any budget is spent. Called at the top of every node."""
@@ -105,6 +117,9 @@ def build_triage_graph(context: TriageContext):
     builder.add_node("draft_reply", _node(context, _draft_reply))
     builder.add_node("propose_actions", _node(context, _propose_actions))
     builder.add_node("policy_gate", _node(context, _policy_gate))
+    builder.add_node("persist_approval", _node(context, _persist_approval))
+    builder.add_node("await_approval", _await_approval)
+    builder.add_node("execute_approved_action", _node(context, _execute_approved_action))
     builder.add_node("finalize", _node(context, _finalize))
 
     builder.add_edge(START, "load_ticket")
@@ -113,10 +128,23 @@ def build_triage_graph(context: TriageContext):
     builder.add_edge("retrieve_knowledge", "draft_reply")
     builder.add_edge("draft_reply", "propose_actions")
     builder.add_edge("propose_actions", "policy_gate")
-    builder.add_edge("policy_gate", "finalize")
+
+    # A run that proposed nothing requiring a human skips the whole pause branch.
+    builder.add_conditional_edges(
+        "policy_gate",
+        _needs_approval,
+        {"persist_approval": "persist_approval", "finalize": "finalize"},
+    )
+    builder.add_edge("persist_approval", "await_approval")
+    builder.add_edge("await_approval", "execute_approved_action")
+    builder.add_edge("execute_approved_action", "finalize")
     builder.add_edge("finalize", END)
 
     return builder
+
+
+def _needs_approval(state: TriageState) -> str:
+    return "persist_approval" if state.get("approval_required") else "finalize"
 
 
 def _node(context: TriageContext, fn):
@@ -306,14 +334,135 @@ async def _policy_gate(context: TriageContext, state: TriageState) -> dict:
     return {"proposals": records, "approval_required": approval_required}
 
 
+async def _persist_approval(context: TriageContext, state: TriageState) -> dict:
+    """Records the proposal a human must decide, and parks the run.
+
+    Upstream of the interrupt on purpose. LangGraph re-runs an *interrupted* node from its start
+    but not nodes that already completed, so this executes once per pause; the insert is still
+    idempotent on `(run_id, tool_call_id)` because a crash-and-retry could reach it again.
+    """
+    proposal = _approval_proposal(state)
+    if proposal is None:
+        # Nothing publishable was gated through — there is nothing for a human to decide.
+        return {"approval_required": False}
+
+    tool_call_id, payload = proposal
+    approval_id = persist_pending_approval(
+        context.connection,
+        organization_id=UUID(state["organization_id"]),
+        run_id=UUID(state["run_id"]),
+        ticket_id=UUID(state["ticket_id"]),
+        tool_call_id=tool_call_id,
+        action_type=AgentActionType.PUBLISH_INTERNAL_REPLY.value,
+        proposal=payload,
+    )
+
+    # The run is visibly waiting before the checkpoint that pauses it is written. See ADR-047:
+    # this ordering means a crash in the window leaves a run marked AWAITING_APPROVAL with a
+    # decidable approval row, which is recoverable, rather than a silent pause nobody can see.
+    set_run_status(
+        context.connection,
+        organization_id=UUID(state["organization_id"]),
+        run_id=UUID(state["run_id"]),
+        status="AWAITING_APPROVAL",
+    )
+
+    return {"approval_id": str(approval_id), "approval_tool_call_id": tool_call_id}
+
+
+async def _await_approval(state: TriageState) -> dict:
+    """Yields until a human decides. Contains nothing but the interrupt, deliberately.
+
+    Resuming re-runs this node from its start, so anything else placed here would run twice. It is
+    also not wrapped by `_node`: a paused run must not be failed by a budget check for the time it
+    spent waiting on a person.
+    """
+    decision: ResumeDecision = interrupt(
+        {
+            "approvalId": state.get("approval_id"),
+            "runId": state.get("run_id"),
+            "ticketId": state.get("ticket_id"),
+            "awaiting": "A human must approve this reply before it is published.",
+        },
+        response_schema=ResumeDecision,
+    )
+
+    # Only a claim at this point; `execute_approved_action` re-reads the real decision.
+    return {"resume_decision": decision.decision.value}
+
+
+async def _execute_approved_action(context: TriageContext, state: TriageState) -> dict:
+    """Invokes the approved action, exactly once, downstream of the interrupt.
+
+    Everything here runs after the interrupt returns, which is the only place a user-visible side
+    effect is safe: code *before* an interrupt re-executes on resume.
+    """
+    approval_id = state.get("approval_id")
+    if approval_id is None:
+        return {"published_reference": None}
+
+    organization_id = UUID(state["organization_id"])
+
+    # The resume payload said what was decided; the database is asked whether that is true.
+    approval = read_approval(
+        context.connection, organization_id=organization_id, approval_id=UUID(approval_id)
+    )
+    if approval is None:
+        raise RunLimitExceeded("APPROVAL_MISSING", "The approval record no longer exists.")
+    if approval.run_id != UUID(state["run_id"]):
+        # An approval belonging to a different run must never authorise this one.
+        raise RunLimitExceeded("APPROVAL_RUN_MISMATCH", "That approval belongs to another run.")
+
+    if approval.status is not ApprovalStatus.APPROVED:
+        # Rejected, expired, or still pending: nothing is published, and that is a normal outcome
+        # rather than a failure.
+        return {
+            "approval_outcome": approval.status.value,
+            "published_reference": None,
+        }
+
+    # The proposal is re-read too, so what gets published is what was stored and approved — not
+    # whatever the graph happens to still hold in state.
+    outcome = await context.internal_actions.execute(
+        run_id=approval.run_id,
+        tool_call_id=approval.tool_call_id,
+        action_type=AgentActionType.PUBLISH_INTERNAL_REPLY.value,
+        arguments={"approvalId": str(approval.id)},
+    )
+
+    return {
+        "approval_outcome": approval.status.value,
+        "published_reference": outcome.result_reference,
+        "already_applied": outcome.already_applied,
+    }
+
+
 async def _finalize(context: TriageContext, state: TriageState) -> dict:
     """Decides the run's terminal state.
 
     A run that proposed a risky write stops at `AWAITING_APPROVAL` — not completed, because the
     thing it set out to do has not happened and a human still has to decide.
     """
-    terminal = "AWAITING_APPROVAL" if state.get("approval_required") else "COMPLETED"
-    return {"terminal_status": terminal, "error_code": None}
+    # A run that went through the gate is finished either way: the human decided, and the
+    # decision — including a rejection — is the run doing its job. ADR-041 chose COMPLETED for a
+    # rejected proposal rather than FAILED, and that still holds now the loop actually closes.
+    return {"terminal_status": "COMPLETED", "error_code": None}
+
+
+def _approval_proposal(state: TriageState) -> tuple[str, dict] | None:
+    """The gated publish proposal and the payload its approval should carry, if there is one."""
+    for record in state.get("proposals", []):
+        if (
+            record["action_type"] == AgentActionType.PUBLISH_INTERNAL_REPLY.value
+            and record["decision"] == PolicyDecision.REQUIRE_APPROVAL.value
+        ):
+            return record["tool_call_id"], {
+                "body": state.get("draft_body", ""),
+                # Carried into the approval so the reviewer sees what the draft relied on, and so
+                # T22's detail view has evidence to show.
+                "citations": state.get("citations", []),
+            }
+    return None
 
 
 def _estimate(messages: list[dict[str, str]]) -> int:

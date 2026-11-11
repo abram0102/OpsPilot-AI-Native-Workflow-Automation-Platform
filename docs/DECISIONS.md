@@ -438,4 +438,46 @@ The text is rendered as plain text rather than markup for a second reason: it wa
 
 **Commit order, because the contract gates the client.** The frontend's typed client cannot reference the four new paths until `packages/contracts` is regenerated, and regenerating needs Docker (Gate H0) — so the backend and the temporary bootstrap step landed first, then the regenerated spec, then the frontend. Committing all three together would have pushed a tree that could not typecheck. As in T18, the run carrying the bootstrap step proves nothing about drift; only the run after its removal does.
 
+## ADR-047 — T23: resuming re-runs the node, so the side effect moved; and the crash windows that remain
+
+Status: **Accepted**, 2026-11-11.
+
+**The fact the whole design turns on.** LangGraph's `interrupt()` docstring says "The graph resumes from the start of the node, **re-executing** all logic", and this was verified rather than taken on trust: a node appending to a list before and after the interrupt produces `['BEFORE', 'BEFORE', 'AFTER']` after resume. **Code before an interrupt runs twice; code after it runs once.** For a node that publishes a customer reply, getting that wrong means publishing twice — so the graph is shaped around it, one concern per node:
+
+```
+policy_gate ─(approval required?)─→ persist_approval → await_approval → execute_approved_action → finalize
+            └────────── no ────────────────────────────────────────────────────────────────────→ finalize
+```
+
+`await_approval` contains *nothing but* the interrupt, so its re-execution is a no-op. The internal action lives in a downstream node, which runs exactly once. The approval insert is upstream — LangGraph does not re-run completed nodes — *and* is written `ON CONFLICT (run_id, tool_call_id) DO UPDATE SET updated_at = approvals.updated_at`, a deliberate no-op touch so the statement is idempotent without ever rewriting `status`. Updating status on conflict would let a replayed resume reset a decided approval back to `PENDING`, re-opening a gate a human had already closed.
+
+`await_approval` is also the one node not wrapped by the budget checker: a run must not be failed for the time it spent waiting on a person.
+
+**The decision is re-read, never trusted.** The resume payload carries `{approval_id, decision}`, and `execute_approved_action` ignores the claimed decision entirely — it re-reads the approval, checks it belongs to *this* run, and acts only on the stored status. A resume asserting `APPROVED` against a still-`PENDING` row publishes nothing, which is the acceptance line's "no automatic publishing bypass" tested directly. Same principle as ADR-045: a claim from the other side of a boundary is a hint.
+
+**"Malformed resume rejected" is structural.** `interrupt(..., response_schema=ResumeDecision)` validates the resume against a Pydantic model and, per its docstring, saves nothing when invalid — so the pause survives a bad resume and can still be answered. A test proves exactly that sequence: garbage resume raises, then a well-formed one completes the run.
+
+**A bug the design review caught before it shipped.** The handler's stream loop iterates `update.items()` treating each key as a node name. LangGraph signals a pause with `{"__interrupt__": (Interrupt(...),)}` — a *tuple*, not node state — which would have mis-sequenced a step row and then crashed on the tuple. The loop now checks for that key explicitly before the node loop.
+
+### Crash windows and reconciliation
+
+The ticket asks these be documented "if dual writes cannot be atomic", and they cannot: the checkpoint is written by the checkpointer on its own connection, the `approvals` row on ours. Two commits, one ordering choice.
+
+**Ordering chosen:** the approval row and `AWAITING_APPROVAL` are written *before* the interrupt yields, so the checkpoint is the later write. Consequences:
+
+- **Crash after the approval row, before the checkpoint.** The run shows `AWAITING_APPROVAL` with a decidable approval, but the thread has no paused checkpoint. A reviewer can decide it, and the resume finds nothing to continue. Recovery: re-running the run from the start reaches `persist_approval` again, which is idempotent and returns the same approval id, and reaches the interrupt properly this time. **Nothing has been published, which is the property that matters.**
+- **The reverse ordering would be worse.** A checkpoint paused at the interrupt with no approval row leaves a run parked on a decision that no reviewer can see or make — invisible, and not self-healing. That is why the visible, decidable state is written first.
+- **Crash between the decision and the resume.** No window: the decision is a single transaction in `services/api` (ADR-046), and the resume is driven separately. An un-resumed decision is simply a pending resume event, which at-least-once delivery retries.
+- **Crash after the internal action but before the run is marked COMPLETED.** The effect happened; the run looks unfinished. A re-resume finds the interrupt already answered and makes no second call, and the server-side `(run_id, tool_call_id)` uniqueness would refuse one anyway. `docs/PRODUCT_AND_ARCHITECTURE.md`: "exactly-once effects are enforced by DB uniqueness and action state checks, not by assuming transport delivers once."
+
+**Not cleaned up on purpose:** `docs/DATA_MODEL.md` says "Never clear checkpoints when there are pending approvals", so nothing here deletes checkpoint rows.
+
+### The seam this ticket does not prove
+
+Nothing in this repository runs `services/api` and `services/agent` together — CI has five independent jobs and `infra/docker-compose.yml` holds only Postgres and Redis. So "approve resumes and posts exactly one ticket message" is proven in two halves: the Python tests assert exactly one internal call with the exact payload, and T21's Java tests assert that such a call posts exactly one message and that a replay posts none.
+
+**What remains unproven is the join between them**: that this client's real HTTP request is accepted by that real endpoint. A mocked transport cannot catch a field-name mismatch, an audience typo or an enum spelling difference. That is a genuine gap, not a technicality, and it needs a cross-service environment to close — T29's end-to-end work or a ticket of its own. The mitigation if it ever is wrong: the failure mode is a refused call, not a duplicated effect, because the uniqueness constraint sits on the server.
+
+**No JWT dependency was added.** Minting HS256 is ~15 lines of stdlib `hmac`/`base64`, this service needs no other JWT behaviour, and verification — the hard direction — stays in Java with Spring Security. The Java test signer is hand-rolled for the same reason.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.

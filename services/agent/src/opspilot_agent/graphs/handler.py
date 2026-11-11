@@ -22,7 +22,9 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.types import Command
 
+from opspilot_agent.clients.internal_actions import InternalActionClient, InternalActionError
 from opspilot_agent.config import Settings, get_settings
 from opspilot_agent.db import build_dsn, connect
 from opspilot_agent.graphs.state import TriageState
@@ -40,8 +42,16 @@ STEP_SEQUENCE: dict[str, tuple[int, str]] = {
     "draft_reply": (3, "DRAFT_REPLY"),
     "propose_actions": (4, "PROPOSE_TOOL"),
     "policy_gate": (5, "PROPOSE_TOOL"),
-    "finalize": (6, "FINALIZE"),
+    "persist_approval": (6, "AWAIT_APPROVAL"),
+    "await_approval": (7, "AWAIT_APPROVAL"),
+    "execute_approved_action": (8, "EXECUTE_TOOL"),
+    "finalize": (9, "FINALIZE"),
 }
+
+INTERRUPT_KEY = "__interrupt__"
+"""LangGraph signals a pause by putting this key in the streamed update, with a *tuple* of
+`Interrupt` as its value rather than node state. Treating it as a node would both mis-sequence a
+step row and crash on the tuple, so the stream loop checks for it explicitly."""
 
 
 @dataclass(frozen=True)
@@ -50,6 +60,7 @@ class RunOutcome:
     status: str
     approval_required: bool
     error_code: str | None = None
+    published_reference: str | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -62,11 +73,71 @@ async def execute_run(
     run_id: UUID,
     ticket_id: UUID,
     settings: Settings | None = None,
+    internal_actions: InternalActionClient | None = None,
 ) -> RunOutcome:
-    """Executes one run start to finish, persisting its trace as it goes.
+    """Starts a run, persisting its trace as it goes.
 
     Idempotent enough to be re-delivered: step rows upsert on `(run_id, sequence)`, and the
     checkpointer keys on the run id, so a replay resumes rather than duplicating.
+    """
+    initial: TriageState = {
+        "organization_id": str(organization_id),
+        "run_id": str(run_id),
+        "ticket_id": str(ticket_id),
+        "steps_used": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+    }
+    return await _drive(
+        organization_id=organization_id,
+        run_id=run_id,
+        graph_input=initial,
+        settings=settings,
+        internal_actions=internal_actions,
+    )
+
+
+async def resume_run(
+    *,
+    organization_id: UUID,
+    run_id: UUID,
+    approval_id: UUID,
+    decision: str,
+    settings: Settings | None = None,
+    internal_actions: InternalActionClient | None = None,
+) -> RunOutcome:
+    """Continues a paused run once a human has decided (docs/TASKS.md T23).
+
+    The decision passed here is only what the caller *claims*; `execute_approved_action` re-reads
+    the approval from the database and acts on that. A malformed value is refused by LangGraph
+    itself, which validates the resume against `ResumeDecision` and saves nothing when it fails —
+    so the pause survives a bad resume and can be answered again.
+
+    Resuming a run that is not paused is a no-op rather than an error: at-least-once delivery
+    means this will be called twice for the same decision, and the second call finds no pending
+    interrupt and simply reports the run's current state.
+    """
+    return await _drive(
+        organization_id=organization_id,
+        run_id=run_id,
+        graph_input=Command(resume={"approval_id": str(approval_id), "decision": decision}),
+        settings=settings,
+        internal_actions=internal_actions,
+    )
+
+
+async def _drive(
+    *,
+    organization_id: UUID,
+    run_id: UUID,
+    graph_input: object,
+    settings: Settings | None = None,
+    internal_actions: InternalActionClient | None = None,
+) -> RunOutcome:
+    """Runs the graph forward from wherever it is, start or resume.
+
+    One driver for both so a resumed run records its trace, its usage and its status exactly the
+    way a fresh one does — two code paths would eventually disagree about one of them.
     """
     settings = settings or get_settings()
 
@@ -83,6 +154,7 @@ async def execute_run(
                 llm=build_llm_provider(settings),
                 embeddings=build_embedding_provider(settings),
                 started_at=time.monotonic(),
+                internal_actions=internal_actions or InternalActionClient(settings),
             )
             graph = build_triage_graph(context).compile(checkpointer=checkpointer)
 
@@ -90,21 +162,20 @@ async def execute_run(
                 connection, organization_id=organization_id, run_id=run_id, status="RUNNING"
             )
 
-            initial: TriageState = {
-                "organization_id": str(organization_id),
-                "run_id": str(run_id),
-                "ticket_id": str(ticket_id),
-                "steps_used": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-            }
             # docs/DATA_MODEL.md: "stable thread_id=agent_runs.id". The checkpoint is therefore
-            # always findable from the run, which is what makes resume possible.
+            # always findable from the run, which is what makes resume possible across processes.
             config = {"configurable": {"thread_id": str(run_id)}}
 
             final_state: TriageState = {}
+            paused = False
             try:
-                async for update in graph.astream(initial, config=config):
+                async for update in graph.astream(graph_input, config=config):
+                    if INTERRUPT_KEY in update:
+                        # The run is parked on a human. `persist_approval` has already written the
+                        # approval row and set AWAITING_APPROVAL, so there is nothing more to do
+                        # here but stop — and specifically not to mark the run finished.
+                        paused = True
+                        continue
                     for node_name, node_state in update.items():
                         final_state = {**final_state, **node_state}
                         _persist_step(connection, organization_id, run_id, node_name, node_state)
@@ -114,10 +185,27 @@ async def execute_run(
                 # Already bounded by T15's retry budget and breaker; by the time it surfaces the
                 # attempt is over. The run stays retryable from the outside.
                 return _fail(connection, organization_id, run_id, str(error.code), final_state)
+            except InternalActionError:
+                # The action could not be attempted. Nothing was published, and the run is left
+                # FAILED with a code rather than silently COMPLETED.
+                return _fail(
+                    connection, organization_id, run_id, "INTERNAL_ACTION_UNAVAILABLE", final_state
+                )
 
             record_usage(
                 connection, organization_id=organization_id, run_id=run_id, state=final_state
             )
+
+            if paused:
+                # Deliberately not a terminal state: the run continues when a decision arrives.
+                set_run_status(
+                    connection,
+                    organization_id=organization_id,
+                    run_id=run_id,
+                    status="AWAITING_APPROVAL",
+                )
+                return RunOutcome(run_id=run_id, status="AWAITING_APPROVAL", approval_required=True)
+
             status = final_state.get("terminal_status", "COMPLETED")
             set_run_status(
                 connection, organization_id=organization_id, run_id=run_id, status=status
@@ -127,6 +215,7 @@ async def execute_run(
                 run_id=run_id,
                 status=status,
                 approval_required=bool(final_state.get("approval_required")),
+                published_reference=final_state.get("published_reference"),
             )
 
 

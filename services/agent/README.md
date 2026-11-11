@@ -72,7 +72,14 @@ uv run python -m opspilot_agent.graphs.handler \
   --organization-id <uuid> --run-id <uuid> --ticket-id <uuid>
 ```
 
-**The graph executes nothing.** `policy_gate` classifies each proposal as `AUTO_EXECUTE`, `REQUIRE_APPROVAL` or `REJECT`; a risky write leaves the run `AWAITING_APPROVAL` for a human. Executing an action needs T21's internal API, and publishing a reply needs an approval id only T22 can mint.
+Since **T23** the graph pauses and resumes for real:
+
+```
+policy_gate ─(needs approval?)→ persist_approval → await_approval → execute_approved_action → finalize
+            └──────── no ─────────────────────────────────────────────────────────────────→ finalize
+```
+
+`await_approval` contains nothing but LangGraph's `interrupt()`, because **resuming re-runs the interrupted node from its start** — code before an interrupt executes twice, code after it once. The action that publishes therefore lives downstream, where it runs exactly once. On resume the claimed decision is ignored and the approval is re-read from the database; only a stored `APPROVED` publishes anything. See `docs/DECISIONS.md` ADR-047, including the crash windows the two non-atomic writes leave.
 
 `graphs/policy.py` is deterministic code with no model in the loop, and is the component worth reading first: it is where "AI cannot choose which permissions it has" is actually enforced. State is checkpointed to Postgres under `thread_id = agent_runs.id`; those tables belong to the checkpointer rather than Flyway (`docs/DATA_MODEL.md`, ADR-043).
 
