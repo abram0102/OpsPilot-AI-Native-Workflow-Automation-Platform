@@ -1,6 +1,7 @@
 package com.opspilot.common.security;
 
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -62,7 +63,14 @@ public class InternalServiceSecurityConfig {
   @Bean
   @Order(Ordered.HIGHEST_PRECEDENCE + 10)
   SecurityFilterChain internalServiceFilterChain(
-      HttpSecurity http, ObjectMapper objectMapper, JwtDecoder internalServiceJwtDecoder)
+      HttpSecurity http,
+      ObjectMapper objectMapper,
+      // @Qualifier is load-bearing, not decoration. Two JwtDecoder beans exist and the user-facing
+      // one is @Primary; Spring resolves @Primary *before* falling back to matching a parameter's
+      // name against a bean name, so a parameter merely *named* internalServiceJwtDecoder was
+      // silently injected the user decoder — which made this chain accept browser tokens and
+      // reject the worker's. Caught by the tests, not by review (docs/DECISIONS.md ADR-045).
+      @Qualifier("internalServiceJwtDecoder") JwtDecoder internalServiceJwtDecoder)
       throws Exception {
     http.securityMatcher(INTERNAL_PATH_PATTERN)
         .csrf(CsrfConfigurer::disable)
