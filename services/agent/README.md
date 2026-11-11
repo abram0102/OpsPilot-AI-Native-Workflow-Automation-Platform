@@ -106,6 +106,28 @@ uv run pytest -m db         # needs POSTGRES_TEST_DSN
 
 CI supplies a `pgvector/pgvector:pg16` service container and runs the `db` selection as its own step, so a skip there fails the build rather than passing quietly.
 
+To run them locally without Docker, point `POSTGRES_TEST_DSN` at any PostgreSQL with pgvector. With Homebrew:
+
+```bash
+brew install postgresql@17 pgvector
+# pgvector ships per-version builds; PG17 needs its files linked into the server's own dirs
+ln -sf /opt/homebrew/opt/pgvector/share/postgresql@17/extension/vector* \
+       /opt/homebrew/share/postgresql@17/extension/
+ln -sf /opt/homebrew/opt/pgvector/lib/postgresql@17/vector.dylib \
+       /opt/homebrew/lib/postgresql@17/
+
+# A throwaway instance on a non-standard port, no background service.
+# unix_socket_directories is emptied because a long data path exceeds the 103-byte socket limit.
+LC_ALL=en_US.UTF-8 initdb -D /tmp/opspilot-pg -U opspilot --auth=trust
+LC_ALL=en_US.UTF-8 pg_ctl -D /tmp/opspilot-pg \
+  -o "-p 55432 -c unix_socket_directories=" -l /tmp/opspilot-pg/server.log start
+createdb -h 127.0.0.1 -p 55432 -U opspilot opspilot_test
+
+POSTGRES_TEST_DSN="postgresql://opspilot@127.0.0.1:55432/opspilot_test" uv run pytest
+```
+
+`LC_ALL` is required on macOS — without it the postmaster aborts with "became multithreaded during startup". The test fixture applies the real Flyway migrations itself, so no schema setup is needed.
+
 ## Providers
 
 ```python

@@ -387,8 +387,12 @@ async def _await_approval(state: TriageState) -> dict:
         response_schema=ResumeDecision,
     )
 
-    # Only a claim at this point; `execute_approved_action` re-reads the real decision.
-    return {"resume_decision": decision.decision.value}
+    # Both are only claims at this point; `execute_approved_action` re-reads the real decision
+    # and checks this approval id against the one this run actually raised.
+    return {
+        "resume_decision": decision.decision.value,
+        "resume_approval_id": str(decision.approval_id),
+    }
 
 
 async def _execute_approved_action(context: TriageContext, state: TriageState) -> dict:
@@ -402,6 +406,16 @@ async def _execute_approved_action(context: TriageContext, state: TriageState) -
         return {"published_reference": None}
 
     organization_id = UUID(state["organization_id"])
+
+    # A resume must name the approval this run raised. Without this check the claimed id is
+    # simply unused, so a resume aimed at another run's approval would be silently ignored rather
+    # than refused — safe, but indistinguishable from a correct resume, which is worse.
+    claimed = state.get("resume_approval_id")
+    if claimed is not None and claimed != approval_id:
+        raise RunLimitExceeded(
+            "APPROVAL_RESUME_MISMATCH",
+            "The resume names an approval this run did not raise.",
+        )
 
     # The resume payload said what was decided; the database is asked whether that is true.
     approval = read_approval(

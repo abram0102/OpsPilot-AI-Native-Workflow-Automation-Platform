@@ -117,8 +117,10 @@ class TestHappyPath:
         assert _run_status(db_connection, seeded["run_id"]) == ("AWAITING_APPROVAL", None)
 
         steps = _steps(db_connection, seeded["run_id"])
+        # Since T23 the run really does stop here, so the trace ends at the approval step rather
+        # than reaching FINALIZE — reaching it would mean the pause had not happened.
         assert [s["sequence"] for s in steps] == [0, 1, 2, 3, 4, 5, 6]
-        assert [s["step_type"] for s in steps][-1] == "FINALIZE"
+        assert [s["step_type"] for s in steps][-1] == "AWAIT_APPROVAL"
 
         # The retrieval step cites the tenant's own document.
         retrieve = next(s for s in steps if s["step_type"] == "RETRIEVE")

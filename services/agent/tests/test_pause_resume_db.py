@@ -174,6 +174,19 @@ class TestPausing:
         await start_run(settings, seeded, RecordingApi())
         approval_id = pending_approval_id(db_connection, seeded)
 
+        # The human's decision, as T22's endpoint records it. Without this the run would publish
+        # nothing — which the no-bypass test covers, and which caught the first version of this
+        # test for not approving anything.
+        with db_connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE approvals SET status = 'APPROVED', decision_by = %s, decision_at = now()
+                 WHERE id = %s
+                """,
+                (seeded["user_id"], approval_id),
+            )
+        db_connection.commit()
+
         # A completely separate "process": new client, new graph, new checkpointer.
         api = RecordingApi()
         outcome = await resume_run(
@@ -360,9 +373,11 @@ class TestNoBypass:
             internal_actions=api.client(settings),
         )
 
-        # Not found in this tenant, so nothing is published and the run fails visibly.
+        # Refused outright: the resume names an approval this run never raised, so nothing is
+        # published and the run fails visibly rather than quietly doing nothing.
         assert api.calls == []
         assert outcome.status == "FAILED"
+        assert outcome.error_code == "APPROVAL_RESUME_MISMATCH"
 
 
 class TestMalformedResume:

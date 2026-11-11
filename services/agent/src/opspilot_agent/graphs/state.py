@@ -77,6 +77,7 @@ class TriageState(TypedDict, total=False):
     approval_id: str
     approval_tool_call_id: str
     resume_decision: str
+    resume_approval_id: str
     approval_outcome: str
     published_reference: str | None
     already_applied: bool
