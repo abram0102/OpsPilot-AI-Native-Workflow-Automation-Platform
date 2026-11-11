@@ -21,12 +21,12 @@ app:
     # Default false (safe); local profile turns it on. ProductionSafetyGuard
     # refuses to start if this is ever true under the "production" profile.
     allow-test-issuer: ${API_ALLOW_TEST_ISSUER:false}
-  # T21: the machine-only internal action API. A distinct audience and a distinct signing key,
-  # so a user's browser token cannot reach /internal/** even by accident — the two filter chains
-  # validate against different decoders entirely (docs/DECISIONS.md ADR-045).
-  internal-service:
-    audience: ${INTERNAL_SERVICE_AUDIENCE:https://internal.opspilot.local}
-    signing-secret: ${INTERNAL_SERVICE_SIGNING_SECRET:}
+    # T21: the machine-only internal action API. A distinct audience and a distinct signing key,
+    # so a user's browser token cannot reach /internal/** even by accident — the two filter
+    # chains validate against different decoders entirely (docs/DECISIONS.md ADR-045).
+    internal-service:
+      audience: ${INTERNAL_SERVICE_AUDIENCE:https://internal.opspilot.local}
+      signing-secret: ${INTERNAL_SERVICE_SIGNING_SECRET:}
   invitations:
     # ISO-8601 duration. No invitation email is sent in V1 (docs/TASKS.md T09); the token is
     # shown once, to the owner/admin who created it, via a protected response.
