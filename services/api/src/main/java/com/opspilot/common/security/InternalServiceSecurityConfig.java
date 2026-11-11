@@ -3,6 +3,7 @@ package com.opspilot.common.security;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -41,7 +42,21 @@ import tools.jackson.databind.ObjectMapper;
  * (docs/PRODUCT_AND_ARCHITECTURE.md: "protected by machine credentials, not just network
  * isolation").
  */
+/**
+ * Only in a servlet application.
+ *
+ * <p>Without this the whole context fails to start whenever the web server is switched off, because
+ * {@code HttpSecurity} is a servlet-scoped bean. That is not hypothetical: {@code make seed-demo}
+ * runs under {@code application-seed.yml}'s {@code web-application-type: none} and had been unable
+ * to start at all — "No qualifying bean of type HttpSecurity" — since a second filter chain was
+ * added. Nothing caught it because no test runs with the web server disabled, and the seeder is a
+ * command, not an endpoint.
+ *
+ * <p>HTTP security configuration belongs to an HTTP application, so making it conditional is the
+ * honest fix rather than giving the seeder a web server it has no use for.
+ */
 @Configuration
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class InternalServiceSecurityConfig {
 
   public static final String INTERNAL_PATH_PATTERN = "/internal/**";

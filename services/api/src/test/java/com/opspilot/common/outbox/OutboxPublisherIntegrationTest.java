@@ -30,6 +30,8 @@ import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
@@ -45,7 +47,27 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Import({TestcontainersConfiguration.class, RedisTestcontainersConfiguration.class})
 @SpringBootTest
+// A stream of its own, not the configured `opspilot:events`. Harmless against a throwaway
+// container, but T26 made it possible to run this suite against a Redis the developer is also using
+// for `make worker-dev` — and a test run then left events on the development stream, which
+// `make worker-health` duly reported as a backlog. Found that way, fixed here.
 class OutboxPublisherIntegrationTest {
+
+  /**
+   * One value, generated once.
+   *
+   * <p>Not {@code @TestPropertySource("...=test:outbox:${random.uuid}")}, which was the first
+   * attempt and silently broke seven tests: {@code random.uuid} is re-evaluated at every property
+   * resolution, so the publisher bean and this test's own {@code @Value} each received a
+   * *different* stream — the publisher wrote to one and the assertions read the other.
+   */
+  private static final String TEST_STREAM_KEY = "test:outbox:" + UUID.randomUUID();
+
+  @DynamicPropertySource
+  static void isolateTheStream(DynamicPropertyRegistry registry) {
+    registry.add("app.outbox.stream-key", () -> TEST_STREAM_KEY);
+    registry.add("app.outbox.consumer-group", () -> "test-agent-workers");
+  }
 
   @Autowired private OutboxPublisher publisher;
   @Autowired private OutboxEventRepository outboxEvents;

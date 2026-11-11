@@ -2,6 +2,7 @@ package com.opspilot.common.security;
 
 import com.opspilot.auth.PrincipalResolvingJwtAuthenticationConverter;
 import com.opspilot.auth.UserRepository;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -22,7 +23,21 @@ import tools.jackson.databind.ObjectMapper;
  * job once T09/T10 add real endpoints. There is still no path to a 200 response anywhere but the
  * health probes, since no business endpoint exists yet (AGENTS.md: no debug auth bypass).
  */
+/**
+ * Only in a servlet application.
+ *
+ * <p>Without this the whole context fails to start whenever the web server is switched off, because
+ * {@code HttpSecurity} is a servlet-scoped bean. That is not hypothetical: {@code make seed-demo}
+ * runs under {@code application-seed.yml}'s {@code web-application-type: none} and had been unable
+ * to start at all — "No qualifying bean of type HttpSecurity" — since a second filter chain was
+ * added. Nothing caught it because no test runs with the web server disabled, and the seeder is a
+ * command, not an endpoint.
+ *
+ * <p>HTTP security configuration belongs to an HTTP application, so making it conditional is the
+ * honest fix rather than giving the seeder a web server it has no use for.
+ */
 @Configuration
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SecurityConfig {
 
   /**
