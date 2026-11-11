@@ -416,4 +416,26 @@ This is worth dwelling on: the code read correctly, the context started, and eve
 
 **Rejections return `200` with `status: REJECTED`, not `403`.** A refused action is a normal outcome a worker must record and branch on; `403` would conflate "you may not do this" with "your identity is wrong", which the filter chain already answers. The reason for a rejection is logged server-side and audited, but not returned — a detailed reason could otherwise confirm the existence of another tenant's run or approval.
 
+## ADR-046 — T22: a decision endpoint with no request body, and a review page that cannot edit
+
+Status: **Accepted**, 2026-11-11.
+
+**Approve and reject take no request body at all.** docs/API_CONTRACT.md requires that "Approval must not accept a replacement body from frontend", and the surest way to honour that is to leave nothing for a body to substitute: the controller methods declare no `@RequestBody`, the server action carries no text, and the typed client functions take only ids. A test posts a body anyway and asserts the stored proposal is unchanged — the enforcement is structural, and the test proves the structure.
+
+**The review page cannot edit the proposal either.** There is no textarea, no "edit before sending" affordance, and the proposed text is rendered inside a `<blockquote>` as plain text. The page says plainly that approving publishes exactly what is shown. An editable field would quietly turn the human from a reviewer of the agent's words into the author of them, which is a different product with a different accountability story — and it would make "what was approved" and "what was published" two separate strings again.
+
+The text is rendered as plain text rather than markup for a second reason: it was written by a model from untrusted ticket and document content, and this page is read by the one person with authority to publish it (AGENTS.md rule 12). That combination is the worst possible place to interpret HTML.
+
+**Two forms, not one with a hidden outcome field.** A hidden input is a value a browser can be made to change, and approve/reject are not interchangeable. Each decision is its own explicit submission.
+
+**A repeated decision writes nothing twice.** `ApprovalService.decide` already returns the stored outcome for an identical repeat (ADR-041), so this layer checks whether the approval was *already decided before it called* and only then skips the audit row and the resume event. Without that check a double-clicked button would have queued a second `agent.run.resume` and told the worker to publish again — the constraint AGENTS.md states as "double approval cannot execute a tool twice". A test asserts exactly one outbox event survives two approvals.
+
+**Rejection also queues a resume.** It would be easy to read "resume" as only applying to approval, but a rejected run still has to be told to stop waiting or it sits in `AWAITING_APPROVAL` for ever. The event carries identifiers only; the worker re-reads the decision and finalises accordingly, which is T23's job.
+
+**A 409 is surfaced as a conflict, not a failure.** When another reviewer decided first, the UI says so and tells the reader to reload, because their next step is to re-read the decision rather than retry. Both outcome and conflict are announced through `role="status"`/`role="alert"` rather than only rendered.
+
+**`evidence` is read tolerantly.** The response surfaces citations from the stored proposal, and an approval without them shows an empty list plus a warning that nothing is backed by a source — rather than failing the request. The graph that attaches citations is T23's, so approvals created before then legitimately have none, and a reviewer seeing one fewer source is recoverable while a reviewer seeing nothing at all is not.
+
+**Commit order, because the contract gates the client.** The frontend's typed client cannot reference the four new paths until `packages/contracts` is regenerated, and regenerating needs Docker (Gate H0) — so the backend and the temporary bootstrap step landed first, then the regenerated spec, then the frontend. Committing all three together would have pushed a tree that could not typecheck. As in T18, the run carrying the bootstrap step proves nothing about drift; only the run after its removal does.
+
 Further decisions and deviations must be recorded here with date, context, alternatives, rationale and consequences.
