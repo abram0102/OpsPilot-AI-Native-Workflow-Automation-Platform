@@ -52,3 +52,28 @@ def test_defaults_match_env_example_values() -> None:
     assert settings.embedding_dimensions == 1536
     assert settings.redis_stream_name == "opspilot:events"
     assert settings.redis_consumer_group == "agent-workers"
+    assert settings.redis_dlq_stream_name == "opspilot:events:dlq"
+
+
+def test_the_shipped_worker_timings_are_the_ones_the_tests_deliberately_compress() -> None:
+    """T25's defaults, asserted here because every consumer test overrides them.
+
+    Those tests shorten the lease, the heartbeat and the reclaim window so a reclaim is exercised
+    rather than waited out for a minute. That makes this the only place the real values are
+    checked — without it, a typo in a default would be invisible until production.
+    """
+    settings = Settings()
+
+    assert settings.worker_lease_seconds == 60
+    assert settings.worker_heartbeat_seconds == 15.0
+    assert settings.worker_max_attempts == 5
+    assert settings.worker_backoff_base_seconds == 1.0
+    assert settings.worker_backoff_max_seconds == 60.0
+    assert settings.redis_block_ms == 5000
+    assert settings.redis_batch_size == 10
+
+    # The invariant that ties the two mechanisms together: a message must not be reclaimable
+    # before the lease on its run has expired, or the new owner could not take the lease.
+    assert settings.worker_reclaim_min_idle_ms >= settings.worker_lease_seconds * 1000
+    # And the lease must outlast several heartbeats, so one missed beat is not fatal.
+    assert settings.worker_lease_seconds >= settings.worker_heartbeat_seconds * 3

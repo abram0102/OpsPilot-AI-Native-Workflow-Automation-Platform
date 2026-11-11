@@ -96,8 +96,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      # T25's consumer tests drive XREADGROUP, XAUTOCLAIM and the pending-entries list against a
+      # real server. A fake would only prove the fake agrees with itself. Same image as
+      # infra/docker-compose.yml and as the Java side's Testcontainers config.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       POSTGRES_TEST_DSN: postgresql://opspilot:opspilot-ci-local-only@localhost:5432/opspilot_test
+      REDIS_TEST_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -119,6 +132,12 @@ jobs:
       # passing while proving nothing.
       - name: Database-backed tests (must actually run)
         run: uv run pytest -m db --strict-markers
+        env:
+          AI_MODE: mock
+      # Same reasoning for Redis (T25): the fixture fails rather than skips when CI is set, so a
+      # lost service container fails the build instead of passing while proving nothing.
+      - name: Redis-backed tests (must actually run)
+        run: uv run pytest -m redis --strict-markers
         env:
           AI_MODE: mock
 

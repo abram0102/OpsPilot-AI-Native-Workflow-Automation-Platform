@@ -12,8 +12,10 @@
   - Terminal 1: `make infra-up`
   - Terminal 2: `make api-dev`
   - Terminal 3: `make agent-dev`
-  - Terminal 4: `make web-dev`
-  - Browser: `http://localhost:3000`, backend health `http://localhost:8080/actuator/health`, worker health `http://localhost:8000/health/live`.
+  - Terminal 4: `make worker-dev` — the Redis Streams consumer (T25). `agent-dev` serves health and queue depth only; **this** is the process that runs ingestion and agent runs, so without it events accrue on the stream and nothing happens.
+  - Terminal 5: `make web-dev`
+  - Browser: `http://localhost:3000`, backend health `http://localhost:8080/actuator/health`, worker health `http://localhost:8000/health/live`, queue depth `http://localhost:8000/health/queue` or `make worker-health`.
+  - The API's own publisher is off unless `OUTBOX_PUBLISHER_ENABLED=true` is in `.env` (T24, ADR-048) — `make api-dev` loads `.env`, and `.env.example` ships it on.
 - `make seed-demo`: seed *fictional* tenants, users, tickets and knowledge docs; deterministic seed idempotent and local/test only. Never allow it on staging/prod without explicit override.
 - `make check`: fast reproducible static+unit+integration+contract+mock-eval; no paid API key.
 - `make test-e2e`: test OIDC signed fixture users, two tenants, mock AI, Playwright browser E2E.

@@ -74,8 +74,15 @@ api-dev: _ensure-env ## Run the Spring Boot API in dev mode (needs `make infra-u
 	# would never have reached the process either. `set -a` exports every assignment in the file.
 	set -a && . ./.env && set +a && cd services/api && ./mvnw spring-boot:run
 
-agent-dev: ## Run the Python AI worker in dev mode — T03
+agent-dev: ## Run the Python AI worker's health/queue API in dev mode — T03
 	cd services/agent && uv run uvicorn opspilot_agent.main:app --reload --port $${AGENT_HEALTH_PORT:-8000}
+
+worker-dev: _ensure-env ## Run the Redis Streams consumer (needs `make infra-up` first) — T25
+	# The process that actually does the work; `agent-dev` only serves health and queue depth.
+	set -a && . ./.env && set +a && cd services/agent && uv run python -m opspilot_agent.streams
+
+worker-health: _ensure-env ## Print queue depth, backlog and dead-letter count as JSON — T25
+	set -a && . ./.env && set +a && cd services/agent && uv run python -m opspilot_agent.streams --health
 
 web-dev: ## Run the Next.js frontend in dev mode — T04
 	cd apps/web && $(NVM_USE) pnpm dev
@@ -94,7 +101,7 @@ API_DOCKER_TESTS_INCLUDE := ApiApplicationTests,FlywayMigrationIntegrationTest,M
 
 test-unit: ## Run fast, Docker-independent unit tests across services — T05
 	cd apps/web && $(NVM_USE) pnpm test
-	cd services/agent && uv run pytest -m 'not db'
+	cd services/agent && uv run pytest -m 'not db and not redis'
 	cd services/api && ./mvnw -q test -Dtest='$(API_DOCKER_TESTS_EXCLUDE)'
 
 test-integration: _ensure-docker ## Run Testcontainers integration tests (needs Docker) — T05+
@@ -102,6 +109,8 @@ test-integration: _ensure-docker ## Run Testcontainers integration tests (needs 
 	@echo "services/agent database-backed tests need POSTGRES_TEST_DSN pointing at a"
 	@echo "PostgreSQL with pgvector (see docs/PROGRESS.md T16); skipped when it is unset."
 	cd services/agent && uv run pytest -m db
+	@echo "T25's consumer tests need REDIS_TEST_URL pointing at a real Redis; skipped when unset."
+	cd services/agent && uv run pytest -m redis
 
 generate-contracts: _ensure-docker ## Regenerate packages/contracts/{openapi.json,src/schema.d.ts} from the real endpoints — T11
 	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecGenerator

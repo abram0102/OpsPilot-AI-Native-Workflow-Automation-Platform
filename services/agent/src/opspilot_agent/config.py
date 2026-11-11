@@ -43,6 +43,33 @@ class Settings(BaseSettings):
     redis_stream_name: str = "opspilot:events"
     redis_consumer_group: str = "agent-workers"
 
+    # T25. The consumer's own name inside the group; blank means "derive one from host and pid",
+    # which is what makes two workers on one machine distinguishable without any configuration.
+    # It matters beyond logging: XAUTOCLAIM reclaims entries *pending for another consumer*, so
+    # two processes sharing a name would consider each other's in-flight work their own.
+    redis_consumer_name: str = ""
+    redis_dlq_stream_name: str = "opspilot:events:dlq"
+    # How long one XREADGROUP waits for work. Long enough that an idle worker is not a busy loop,
+    # short enough that a shutdown signal is noticed promptly.
+    redis_block_ms: int = 5000
+    redis_batch_size: int = 10
+
+    # Retry policy for a *handler* that failed, not for a broken message: those are dead-lettered
+    # immediately, since no number of retries will make them parseable.
+    worker_max_attempts: int = 5
+    worker_backoff_base_seconds: float = 1.0
+    worker_backoff_max_seconds: float = 60.0
+
+    # The per-run lease (agent_runs.lease_owner / lease_expires_at, columns V004 already created).
+    # The TTL is deliberately a small multiple of the heartbeat: one missed heartbeat must not be
+    # enough to have another worker declare the run abandoned.
+    worker_lease_seconds: int = 60
+    worker_heartbeat_seconds: float = 15.0
+    # How long a stream entry must sit unacknowledged before another worker may claim it. Kept at
+    # or above the lease TTL on purpose — reclaiming sooner than the lease expires would hand the
+    # entry to a worker that then cannot take the lease.
+    worker_reclaim_min_idle_ms: int = 60000
+
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = "opspilot"

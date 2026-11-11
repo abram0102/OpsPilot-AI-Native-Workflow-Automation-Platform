@@ -232,3 +232,115 @@ def insert_document(
         )
     connection.commit()
     return document_id
+
+
+# --- Redis (T25) -----------------------------------------------------------------------------
+#
+# Same shape as the Postgres fixtures above, and for the same reason: a skipped test in CI would
+# pass while proving nothing about XREADGROUP, XAUTOCLAIM or acknowledgement ordering, which are
+# exactly the things that cannot be reasoned about without a real server.
+#
+# Two settings fixtures, not one. Plenty of the consumer's behaviour — group creation, parsing,
+# dead-lettering, acknowledgement order, reclaim — needs only Redis, and making those tests drag
+# in a database would mean a machine with Redis and no Postgres could not run any of them.
+
+
+def _redis_url() -> str | None:
+    return os.environ.get("REDIS_TEST_URL")
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> str:
+    url = _redis_url()
+    if url:
+        return url
+
+    if os.environ.get("CI"):
+        pytest.fail(
+            "REDIS_TEST_URL is not set, but this is CI, where the redis service container "
+            "should have provided it. Refusing to skip the Redis-backed tests.",
+            pytrace=False,
+        )
+
+    pytest.skip(
+        "REDIS_TEST_URL is not set — these tests need a real Redis "
+        "(run one locally, or let CI's service container provide it)."
+    )
+
+
+def _settings_for(redis_url: str, postgres_dsn: str | None):
+    """Settings with timings compressed for tests.
+
+    The production defaults (a 60s lease, a 60s reclaim window, a 5s block) would make every
+    reclaim test take a minute. Shortened here — and only here — so the mechanism is exercised
+    rather than waited on; the shipped defaults are asserted in test_config.py.
+    """
+    from urllib.parse import urlparse
+
+    from opspilot_agent.config import Settings
+
+    redis_parts = urlparse(redis_url)
+    overrides = {}
+    if postgres_dsn:
+        db = urlparse(postgres_dsn)
+        overrides = {
+            "postgres_host": db.hostname or "localhost",
+            "postgres_port": db.port or 5432,
+            "postgres_db": (db.path or "/opspilot").lstrip("/"),
+            "postgres_user": db.username or "opspilot",
+            "postgres_password": db.password,
+        }
+
+    return Settings(
+        redis_host=redis_parts.hostname or "localhost",
+        redis_port=redis_parts.port or 6379,
+        # A unique stream per test, so tests cannot see each other's messages even when they run
+        # against a shared Redis.
+        redis_stream_name=f"test:events:{uuid4()}",
+        redis_dlq_stream_name=f"test:events:dlq:{uuid4()}",
+        redis_block_ms=50,
+        worker_lease_seconds=5,
+        worker_heartbeat_seconds=0.05,
+        # Reclaim immediately: every pending entry is "idle enough" the moment it is pending.
+        worker_reclaim_min_idle_ms=0,
+        worker_backoff_base_seconds=0.0,
+        worker_backoff_max_seconds=0.0,
+        worker_max_attempts=3,
+        **overrides,
+    )
+
+
+@pytest.fixture
+def redis_settings(redis_url: str):
+    """Redis only — for the consumer mechanics that never touch a database."""
+    return _settings_for(redis_url, None)
+
+
+@pytest.fixture
+def worker_settings(redis_url: str, migrated_database: str):
+    """Redis *and* Postgres — for end-to-end dispatch through a real handler."""
+    return _settings_for(redis_url, migrated_database)
+
+
+@pytest.fixture
+async def redis_client(redis_settings):
+    """A client whose test keys are removed afterwards, so nothing leaks between tests."""
+    async for client in _client(redis_settings):
+        yield client
+
+
+@pytest.fixture
+async def worker_client(worker_settings):
+    async for client in _client(worker_settings):
+        yield client
+
+
+async def _client(settings):
+    from opspilot_agent.streams.client import build_redis
+
+    client = build_redis(settings)
+    try:
+        yield client
+    finally:
+        await client.delete(settings.redis_stream_name, settings.redis_dlq_stream_name)
+        await client.aclose()

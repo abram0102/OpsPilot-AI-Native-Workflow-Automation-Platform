@@ -41,6 +41,10 @@ markers = [
     # (Gate H0); CI runs these as their own step against a service container, so they cannot
     # silently skip there.
     "db: requires a real PostgreSQL database",
+    # Needs a real Redis via REDIS_TEST_URL. Same rule as `db`: skipped where there is no Redis,
+    # and the fixture fails rather than skips in CI, where the service container should have
+    # provided one.
+    "redis: requires a real Redis server",
 ]
 
 [build-system]
