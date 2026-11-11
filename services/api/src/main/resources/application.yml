@@ -40,7 +40,11 @@ app:
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
     backoff-base: ${OUTBOX_BACKOFF_BASE:PT1S}
     publisher:
-      # Off by default so tests drive publishBatch() directly; local and production enable it.
+      # Off by default, including under the `local` profile — the test suite runs under that
+      # profile (application.yml makes it the default and no test overrides it), so enabling it
+      # there would start a 2-second timer inside every @SpringBootTest, claiming and publishing
+      # rows that other tests assert on. `.env` sets OUTBOX_PUBLISHER_ENABLED=true and `make
+      # api-dev` loads it, which is how a real local run gets the publisher.
       enabled: ${OUTBOX_PUBLISHER_ENABLED:false}
       interval-ms: ${OUTBOX_PUBLISHER_INTERVAL_MS:2000}
   invitations:

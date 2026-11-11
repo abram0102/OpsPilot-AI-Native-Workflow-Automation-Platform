@@ -68,8 +68,11 @@ infra-reset: _ensure-docker _ensure-env ## Destroy local infra containers AND vo
 	fi
 	$(COMPOSE) down -v
 
-api-dev: ## Run the Spring Boot API in dev mode (needs `make infra-up` first) — T02
-	cd services/api && ./mvnw spring-boot:run
+api-dev: _ensure-env ## Run the Spring Boot API in dev mode (needs `make infra-up` first) — T02
+	# `.env` really is loaded here now (T24). application-local.yml has claimed it since T02, but
+	# nothing was exporting it: POSTGRES_PASSWORD has no default, and OUTBOX_PUBLISHER_ENABLED
+	# would never have reached the process either. `set -a` exports every assignment in the file.
+	set -a && . ./.env && set +a && cd services/api && ./mvnw spring-boot:run
 
 agent-dev: ## Run the Python AI worker in dev mode — T03
 	cd services/agent && uv run uvicorn opspilot_agent.main:app --reload --port $${AGENT_HEALTH_PORT:-8000}

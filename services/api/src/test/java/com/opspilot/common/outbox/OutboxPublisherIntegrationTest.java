@@ -1,6 +1,7 @@
 package com.opspilot.common.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.opspilot.RedisTestcontainersConfiguration;
 import com.opspilot.TestcontainersConfiguration;
@@ -23,7 +24,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -56,6 +59,9 @@ class OutboxPublisherIntegrationTest {
   @Value("${app.outbox.stream-key}")
   private String streamKey;
 
+  @Value("${app.outbox.consumer-group}")
+  private String consumerGroup;
+
   @Value("${app.outbox.max-attempts}")
   private int maxAttempts;
 
@@ -66,6 +72,7 @@ class OutboxPublisherIntegrationTest {
     // The claim query is global by design — a publisher drains every tenant's backlog — so leftover
     // rows from an earlier test would be claimed by this one.
     outboxEvents.deleteAll();
+    // Deleting the key drops its consumer groups with it.
     redis.delete(streamKey);
 
     User owner = users.saveAndFlush(user());
@@ -209,8 +216,8 @@ class OutboxPublisherIntegrationTest {
     OutboxEvent twiceFailed = outboxEvents.findById(row.getId()).orElseThrow();
 
     assertThat(twiceFailed.getAttempts()).isEqualTo(2);
-    // The second wait is longer than the first measured from the same baseline: attempt 1 waits
-    // 2 × base, attempt 2 waits 4 × base.
+    // The second wait is longer than the first: the first failure schedules 1 × base, the second
+    // 2 × base, doubling to a cap of 64 × base.
     assertThat(twiceFailed.getNextAttemptAt()).isAfter(firstDelay);
   }
 
@@ -320,6 +327,48 @@ class OutboxPublisherIntegrationTest {
     assertThat(roundTripped.organizationId()).isEqualTo(orgId);
     assertThat(OutboxEnvelopeVerdict.classify(roundTripped))
         .isEqualTo(OutboxEnvelopeVerdict.ACCEPTED);
+  }
+
+  @Test
+  void theConsumerGroupIsCreatedOnThePublishingSideAndCreatingItTwiceIsNotAnError() {
+    // The initializer is normally built at startup and is gated off with the publisher, so it is
+    // exercised here directly against the real container. A worker that created its own group
+    // would create it at `$` and miss everything already published; from offset 0 it misses
+    // nothing.
+    new RedisConsumerGroupInitializer(redis, streamKey, consumerGroup);
+
+    assertThat(redis.opsForStream().groups(streamKey))
+        .extracting(group -> group.groupName())
+        .contains(consumerGroup);
+
+    // BUSYGROUP on every restart after the first. Success, not failure.
+    assertThatCode(() -> new RedisConsumerGroupInitializer(redis, streamKey, consumerGroup))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void anEventPublishedBeforeTheWorkerEverRanIsStillDeliveredToTheGroup() {
+    // The reason the group is created from offset 0: this row is published with no consumer group
+    // in existence at all, and must still be readable by the group once it is created.
+    OutboxEvent row = save(OutboxEventType.AGENT_RUN_REQUESTED, "agent_run");
+    assertThat(publisher.publishBatch()).isEqualTo(1);
+
+    new RedisConsumerGroupInitializer(redis, streamKey, consumerGroup);
+
+    List<MapRecord<String, Object, Object>> pending =
+        redis
+            .opsForStream()
+            .read(
+                Consumer.from(consumerGroup, "test-worker"),
+                StreamOffset.create(streamKey, ReadOffset.lastConsumed()));
+    assertThat(pending).isNotNull();
+    assertThat(pending)
+        .extracting(record ->
+            objectMapper
+                .readTree(String.valueOf(record.getValue().get(OutboxPublisher.PAYLOAD_FIELD)))
+                .get("eventId")
+                .asString())
+        .containsExactly(row.getId().toString());
   }
 
   // --- helpers -------------------------------------------------------------------------------

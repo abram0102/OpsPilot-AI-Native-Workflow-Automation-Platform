@@ -18,12 +18,6 @@ spring:
     locations: classpath:db/migration
 
 app:
-  # T24: the outbox publisher runs in local development, because `make infra-up` provides the
-  # Redis it needs. It stays off in `application.yml`'s defaults so the test suite drives
-  # publishBatch() directly instead of racing a timer.
-  outbox:
-    publisher:
-      enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
   security:
     # Safe to default true here: it only enables trusting a key pair this
     # same process generates for itself (TestIssuerConfig) and nothing
