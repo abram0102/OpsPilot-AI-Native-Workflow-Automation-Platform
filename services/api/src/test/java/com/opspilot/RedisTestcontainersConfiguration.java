@@ -1,5 +1,6 @@
 package com.opspilot;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -24,8 +25,18 @@ import org.testcontainers.containers.wait.strategy.Wait;
 @TestConfiguration(proxyBeanMethods = false)
 public class RedisTestcontainersConfiguration {
 
+  /**
+   * Skips the container when an external Redis is supplied instead, mirroring {@link
+   * TestcontainersConfiguration}'s switch. With {@code -Dopspilot.test.external-redis=true} and the
+   * usual {@code REDIS_HOST}/{@code REDIS_PORT} variables, the whole Java suite — publisher tests
+   * included — runs on a machine with no Docker. Defaults to the container, so CI is untouched.
+   */
   @Bean
   @ServiceConnection(name = "redis")
+  @ConditionalOnProperty(
+      name = "opspilot.test.external-redis",
+      havingValue = "false",
+      matchIfMissing = true)
   GenericContainer<?> redisContainer() {
     return new GenericContainer<>("redis:7-alpine")
         .withExposedPorts(6379)

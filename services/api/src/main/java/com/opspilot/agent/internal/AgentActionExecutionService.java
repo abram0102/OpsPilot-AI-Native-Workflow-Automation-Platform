@@ -2,6 +2,7 @@ package com.opspilot.agent.internal;
 
 import com.opspilot.agent.AgentRun;
 import com.opspilot.agent.AgentRunRepository;
+import com.opspilot.agent.AgentRunStatus;
 import com.opspilot.agent.Approval;
 import com.opspilot.agent.ApprovalRepository;
 import com.opspilot.agent.ApprovalStatus;
@@ -55,6 +56,7 @@ public class AgentActionExecutionService {
   private final TicketTagRepository ticketTags;
   private final TicketMessageRepository ticketMessages;
   private final AuditEventRepository auditEvents;
+  private final AgentActionFailureAudit failureAudit;
   private final ObjectMapper objectMapper;
 
   public AgentActionExecutionService(
@@ -66,6 +68,7 @@ public class AgentActionExecutionService {
       TicketTagRepository ticketTags,
       TicketMessageRepository ticketMessages,
       AuditEventRepository auditEvents,
+      AgentActionFailureAudit failureAudit,
       ObjectMapper objectMapper) {
     this.runs = runs;
     this.approvals = approvals;
@@ -75,6 +78,7 @@ public class AgentActionExecutionService {
     this.ticketTags = ticketTags;
     this.ticketMessages = ticketMessages;
     this.auditEvents = auditEvents;
+    this.failureAudit = failureAudit;
     this.objectMapper = objectMapper;
   }
 
@@ -92,22 +96,36 @@ public class AgentActionExecutionService {
     AgentRun run = maybeRun.get();
     UUID organizationId = run.getOrganizationId();
 
-    // A replay must return the stored outcome, not act again.
-    Optional<ToolExecution> existing = executions.findByRunIdAndToolCallId(run.getId(), toolCallId);
-    if (existing.isPresent()) {
-      ToolExecution previous = existing.get();
-      if (previous.getStatus() == ToolExecutionStatus.SUCCEEDED) {
-        return ExecuteAgentActionResponse.succeeded(toolCallId, previous.getResultRef(), true);
-      }
-      if (previous.getStatus() == ToolExecutionStatus.FAILED_PERMANENT) {
-        return ExecuteAgentActionResponse.rejected(toolCallId);
-      }
-      // Anything mid-flight or retryable falls through and is attempted again under the same key.
+    // T26: claim the row and hold it for the rest of this transaction before deciding anything.
+    // Everything below — the replay check, the policy check, the effect — now runs with concurrent
+    // deliveries of this same logical call queued behind the row rather than racing through it.
+    ToolExecution execution = claimAndLock(organizationId, run, request);
+
+    // A replay returns the stored outcome and acts no further. Read under the lock, so a caller
+    // that waited for an in-flight sibling sees that sibling's committed result.
+    if (execution.getStatus() == ToolExecutionStatus.SUCCEEDED) {
+      return ExecuteAgentActionResponse.succeeded(toolCallId, execution.getResultRef(), true);
+    }
+    if (execution.getStatus() == ToolExecutionStatus.FAILED_PERMANENT) {
+      return ExecuteAgentActionResponse.rejected(toolCallId);
+    }
+    // Anything mid-flight or retryable falls through and is attempted again under the same key.
+
+    // The cancel/retry race (T26). Checked *after* the replay branch on purpose: an action that
+    // already succeeded must keep reporting its outcome even once the run is cancelled, because
+    // the effect is out in the world and pretending otherwise would be a lie. What cancellation
+    // forbids is a *new* effect.
+    if (run.getStatus() == AgentRunStatus.CANCELLED) {
+      markFailed(execution, ToolExecutionStatus.FAILED_PERMANENT);
+      return reject(toolCallId, organizationId, request, "The run has been cancelled.");
     }
 
     String policyRejection =
         AgentActionPolicy.rejectionReason(request.actionType(), request.safeArguments());
     if (policyRejection != null) {
+      // Permanent by nature: the same arguments will be refused by the same rule for ever, so the
+      // row records that rather than leaving a PROPOSED row a retry would pick up again.
+      markFailed(execution, ToolExecutionStatus.FAILED_PERMANENT);
       return reject(toolCallId, organizationId, request, policyRejection);
     }
 
@@ -115,13 +133,9 @@ public class AgentActionExecutionService {
         tickets.findByIdAndOrganizationId(run.getTicketId(), organizationId).orElse(null);
     if (ticket == null) {
       // The run names a ticket that is gone, or belonged to another tenant all along.
+      markFailed(execution, ToolExecutionStatus.FAILED_PERMANENT);
       return reject(toolCallId, organizationId, request, "The run's ticket no longer exists.");
     }
-
-    ToolExecution execution =
-        existing.orElseGet(() ->
-            executions.saveAndFlush(
-                new ToolExecution(organizationId, run.getId(), toolCallId, request.actionType())));
 
     Approval approval = null;
     if (AgentActionPolicy.requiresApproval(request.actionType())) {
@@ -173,11 +187,42 @@ public class AgentActionExecutionService {
           toolCallId,
           e);
       markFailed(execution, ToolExecutionStatus.FAILED_RETRYABLE);
-      recordAudit(
-          organizationId, run, request, "agent.action.failed", Map.of("toolCallId", toolCallId));
+      // In its own transaction, so the record survives even when the failure was a database error
+      // that already marked this one rollback-only. See AgentActionFailureAudit for what a probe
+      // showed happens otherwise: nothing published, and no trace that anything was attempted.
+      failureAudit.recordFailure(organizationId, run.getId(), run.getTicketId(), request);
       return new ExecuteAgentActionResponse(
           toolCallId, ExecuteAgentActionResponse.ActionStatus.FAILED, null, false);
     }
+  }
+
+  /**
+   * Creates the execution row if nobody has, then locks it.
+   *
+   * <p>Two mechanisms, because they cover different races. {@code INSERT ... ON CONFLICT DO
+   * NOTHING} serializes callers racing to *create* the row: a second delivery arriving while the
+   * first transaction is still open blocks on {@code uq_tool_executions_run_tool_call} rather than
+   * raising, which is what turns ten simultaneous duplicates into one effect and nine replies
+   * reporting the stored outcome. {@code SELECT ... FOR UPDATE} then covers the other race, where
+   * the row already exists and is retryable: without it two retries would both read a non-terminal
+   * status and both apply the effect.
+   *
+   * <p>Neither is an in-memory lock, deliberately (AGENTS.md: "DB uniqueness and row-level locks,
+   * not in-memory mutexes"). A mutex would hold only within one JVM, and this API runs behind more
+   * than one instance.
+   */
+  private ToolExecution claimAndLock(
+      UUID organizationId, AgentRun run, ExecuteAgentActionRequest request) {
+    executions.insertIfAbsent(
+        organizationId, run.getId(), request.toolCallId(), request.actionType().name());
+
+    return executions
+        .lockByRunIdAndToolCallId(run.getId(), request.toolCallId())
+        .orElseThrow(() ->
+            // Unreachable: the insert above either created the row or found it. If this ever
+            // throws, the unique constraint the whole design rests on is missing.
+            new IllegalStateException(
+                "No tool execution row after claiming it for run " + run.getId() + "."));
   }
 
   /**

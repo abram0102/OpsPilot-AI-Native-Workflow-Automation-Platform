@@ -37,8 +37,22 @@ public class ToolExecutionService {
                       ToolExecutionStatus.FAILED_PERMANENT),
               // A retryable failure may be attempted again under the same key; that is the whole
               // distinction from a permanent one.
+              //
+              // T26 added AUTHORIZED here, and it was a real bug rather than a tidying: the
+              // executor always re-authorizes before executing, so without this edge a
+              // FAILED_RETRYABLE row could never actually be retried and the status was a dead
+              // end in practice. Found by writing a retry test, not by reading the table.
+              //
+              // Both routes stay legal, and they mean different things. The executor takes
+              // AUTHORIZED, which re-reads and re-checks the approval on every attempt — the
+              // stricter path, and the one a retry arriving from a redelivered message must take.
+              // The direct EXECUTING edge remains for a retry inside an attempt that was already
+              // authorized; T17 asserts it as the definition of "retryable".
               ToolExecutionStatus.FAILED_RETRYABLE,
-                  EnumSet.of(ToolExecutionStatus.EXECUTING, ToolExecutionStatus.FAILED_PERMANENT),
+                  EnumSet.of(
+                      ToolExecutionStatus.AUTHORIZED,
+                      ToolExecutionStatus.EXECUTING,
+                      ToolExecutionStatus.FAILED_PERMANENT),
               ToolExecutionStatus.SUCCEEDED, EnumSet.noneOf(ToolExecutionStatus.class),
               ToolExecutionStatus.FAILED_PERMANENT, EnumSet.noneOf(ToolExecutionStatus.class)));
 

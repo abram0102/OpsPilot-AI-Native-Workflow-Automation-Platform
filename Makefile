@@ -96,8 +96,8 @@ lint: ## Run all linters across web/api/agent — T05
 # (a bare name after a comma is a separate positive-include filter, not a
 # continuation of the exclusion) — so these are two distinct strings, not
 # one list reused with/without a prefix.
-API_DOCKER_TESTS_EXCLUDE := !ApiApplicationTests,!FlywayMigrationIntegrationTest,!MembershipRepositoryIntegrationTest,!TicketRepositoryIntegrationTest,!SecurityConfigIntegrationTest,!JwtAuthenticationIntegrationTest,!OrganizationAccessHttpIntegrationTest,!MeControllerIntegrationTest,!OrganizationHttpIntegrationTest,!InvitationHttpIntegrationTest,!TicketHttpIntegrationTest,!TicketMessageHttpIntegrationTest,!OpenApiSpecDriftTest,!OpenApiSpecGenerator,!KnowledgeHttpIntegrationTest,!AgentPersistenceIntegrationTest,!AgentRunHttpIntegrationTest,!InternalAgentActionHttpIntegrationTest,!ApprovalHttpIntegrationTest,!OutboxPublisherIntegrationTest,!OutboxReadinessIntegrationTest
-API_DOCKER_TESTS_INCLUDE := ApiApplicationTests,FlywayMigrationIntegrationTest,MembershipRepositoryIntegrationTest,TicketRepositoryIntegrationTest,SecurityConfigIntegrationTest,JwtAuthenticationIntegrationTest,OrganizationAccessHttpIntegrationTest,MeControllerIntegrationTest,OrganizationHttpIntegrationTest,InvitationHttpIntegrationTest,TicketHttpIntegrationTest,TicketMessageHttpIntegrationTest,OpenApiSpecDriftTest,KnowledgeHttpIntegrationTest,AgentPersistenceIntegrationTest,AgentRunHttpIntegrationTest,InternalAgentActionHttpIntegrationTest,ApprovalHttpIntegrationTest,OutboxPublisherIntegrationTest,OutboxReadinessIntegrationTest
+API_DOCKER_TESTS_EXCLUDE := !ApiApplicationTests,!FlywayMigrationIntegrationTest,!MembershipRepositoryIntegrationTest,!TicketRepositoryIntegrationTest,!SecurityConfigIntegrationTest,!JwtAuthenticationIntegrationTest,!OrganizationAccessHttpIntegrationTest,!MeControllerIntegrationTest,!OrganizationHttpIntegrationTest,!InvitationHttpIntegrationTest,!TicketHttpIntegrationTest,!TicketMessageHttpIntegrationTest,!OpenApiSpecDriftTest,!OpenApiSpecGenerator,!KnowledgeHttpIntegrationTest,!AgentPersistenceIntegrationTest,!AgentRunHttpIntegrationTest,!InternalAgentActionHttpIntegrationTest,!ApprovalHttpIntegrationTest,!OutboxPublisherIntegrationTest,!OutboxReadinessIntegrationTest,!AgentActionIdempotencyIntegrationTest
+API_DOCKER_TESTS_INCLUDE := ApiApplicationTests,FlywayMigrationIntegrationTest,MembershipRepositoryIntegrationTest,TicketRepositoryIntegrationTest,SecurityConfigIntegrationTest,JwtAuthenticationIntegrationTest,OrganizationAccessHttpIntegrationTest,MeControllerIntegrationTest,OrganizationHttpIntegrationTest,InvitationHttpIntegrationTest,TicketHttpIntegrationTest,TicketMessageHttpIntegrationTest,OpenApiSpecDriftTest,KnowledgeHttpIntegrationTest,AgentPersistenceIntegrationTest,AgentRunHttpIntegrationTest,InternalAgentActionHttpIntegrationTest,ApprovalHttpIntegrationTest,OutboxPublisherIntegrationTest,OutboxReadinessIntegrationTest,AgentActionIdempotencyIntegrationTest
 
 test-unit: ## Run fast, Docker-independent unit tests across services — T05
 	cd apps/web && $(NVM_USE) pnpm test
@@ -111,6 +111,14 @@ test-integration: _ensure-docker ## Run Testcontainers integration tests (needs 
 	cd services/agent && uv run pytest -m db
 	@echo "T25's consumer tests need REDIS_TEST_URL pointing at a real Redis; skipped when unset."
 	cd services/agent && uv run pytest -m redis
+
+test-integration-external: ## Same Java tests, against servers you are already running (no Docker) — T26
+	# For a machine with no Docker (Gate H0). Point POSTGRES_* at a PostgreSQL with pgvector and
+	# REDIS_* at a Redis, and the Testcontainers configurations stand aside. This is how T26's
+	# concurrency tests were verified before CI — which is how the retry bug in the tool-execution
+	# transition table was found at all.
+	cd services/api && ./mvnw -q test \
+		-Dopspilot.test.external-postgres=true -Dopspilot.test.external-redis=true
 
 generate-contracts: _ensure-docker ## Regenerate packages/contracts/{openapi.json,src/schema.d.ts} from the real endpoints — T11
 	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecGenerator

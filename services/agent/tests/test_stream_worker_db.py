@@ -11,14 +11,18 @@ from __future__ import annotations
 import json
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
+from pydantic import SecretStr
 from redis.exceptions import RedisError
 
+from opspilot_agent.clients.internal_actions import InternalActionClient
 from opspilot_agent.knowledge.storage import LocalObjectStore
 from opspilot_agent.streams import consumer as consumer_module
 from opspilot_agent.streams.consumer import MAX_ATTEMPTS_ERROR_CODE, StreamConsumer
 from opspilot_agent.streams.envelope import (
     AGENT_RUN_REQUESTED,
+    AGENT_RUN_RESUME,
     KNOWLEDGE_INGEST_REQUESTED,
     PAYLOAD_FIELD,
     SCHEMA_VERSION,
@@ -34,10 +38,63 @@ days without a scan.
 """
 
 
+SECRET = "a-local-test-secret-long-enough-for-hs256"
+
+
 @pytest.fixture
 def settings(worker_settings, tmp_path):
     # The worker reads documents from the same local root the Java adapter writes to (ADR-040).
-    return worker_settings.model_copy(update={"storage_local_dir": str(tmp_path)})
+    return worker_settings.model_copy(
+        update={
+            "storage_local_dir": str(tmp_path),
+            "internal_service_signing_secret": SecretStr(SECRET),
+        }
+    )
+
+
+class RecordingApi:
+    """Stands in for services/api's internal action endpoint, recording what it receives."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def client(self, settings) -> InternalActionClient:
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            self.calls.append(body)
+            return httpx.Response(
+                200,
+                json={
+                    "toolCallId": body["toolCallId"],
+                    "status": "SUCCEEDED",
+                    "resultReference": f"ticket_message:{uuid4()}",
+                    "alreadyApplied": False,
+                },
+            )
+
+        return InternalActionClient(
+            settings,
+            client=httpx.AsyncClient(
+                transport=httpx.MockTransport(handler), base_url="https://api.internal"
+            ),
+        )
+
+
+def _dispatch_with(api: RecordingApi):
+    """The real dispatch, with only the HTTP collaborator replaced.
+
+    Not a stub: the graph, the lease and every status check run for real. Replacing the client is
+    what makes "the action was performed" observable without a live Java API, the same way
+    test_stream_dispatch_db.py does it.
+    """
+    from opspilot_agent.streams.dispatch import dispatch as real_dispatch
+
+    async def dispatch_with_api(envelope, *, settings, owner):
+        return await real_dispatch(
+            envelope, settings=settings, owner=owner, internal_actions=api.client(settings)
+        )
+
+    return dispatch_with_api
 
 
 async def _publish(client, settings, *, event_type: str, aggregate_id: UUID, organization_id: UUID):
@@ -313,3 +370,68 @@ async def test_exhausting_attempts_never_rewrites_a_run_that_already_finished(
             "SELECT status, last_error_code FROM agent_runs WHERE id = %s", (seeded_run["run_id"],)
         )
         assert cursor.fetchone() == ("COMPLETED", None)
+
+
+async def test_a_crash_after_the_action_but_before_the_ack_performs_it_once(
+    db_connection, organization, worker_client, settings, seeded_run, monkeypatch
+):
+    """T26's acceptance wording, from the worker's side.
+
+    The approved action is performed and committed, then the process dies before `XACK`. The entry
+    is reclaimed and the resume runs again — and the action must not be performed a second time.
+    Two independent guards have to hold for that: the run is no longer `AWAITING_APPROVAL`, so
+    dispatch stops before the graph; and even if it did not, the API refuses a second effect for
+    the same `(runId, toolCallId)`.
+    """
+    api = RecordingApi()
+
+    # Start the run so it pauses on a human.
+    await _publish(
+        worker_client,
+        settings,
+        event_type=AGENT_RUN_REQUESTED,
+        aggregate_id=seeded_run["run_id"],
+        organization_id=organization,
+    )
+    worker = StreamConsumer(settings, redis=worker_client, owner="worker-1")
+    await worker.ensure_group()
+    monkeypatch.setattr(consumer_module, "dispatch", _dispatch_with(api))
+    await worker.process_once()
+
+    with db_connection.cursor() as cursor:
+        cursor.execute("SELECT id FROM approvals WHERE run_id = %s", (seeded_run["run_id"],))
+        approval_id = cursor.fetchone()[0]
+        cursor.execute(
+            "UPDATE approvals SET status = 'APPROVED', decision_by = %s, decision_at = now() "
+            "WHERE id = %s",
+            (seeded_run["user_id"], approval_id),
+        )
+    db_connection.commit()
+
+    await _publish(
+        worker_client,
+        settings,
+        event_type=AGENT_RUN_RESUME,
+        aggregate_id=seeded_run["run_id"],
+        organization_id=organization,
+    )
+
+    real_xack = worker_client.xack
+
+    async def die_before_acking(*args, **kwargs):
+        raise RedisError("process died before acknowledging")
+
+    monkeypatch.setattr(worker_client, "xack", die_before_acking)
+    with pytest.raises(RedisError):
+        await worker.process_once()
+
+    # The action happened; the acknowledgement did not.
+    assert len(api.calls) == 1
+    assert await _pending(worker_client, settings) == 1
+
+    monkeypatch.setattr(worker_client, "xack", real_xack)
+    await worker.process_once()
+
+    assert await _pending(worker_client, settings) == 0
+    # Still one. The redelivery found a run that is no longer awaiting approval.
+    assert len(api.calls) == 1
