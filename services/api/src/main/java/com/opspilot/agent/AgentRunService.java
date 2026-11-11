@@ -5,6 +5,7 @@ import com.opspilot.auth.OrganizationAccessService;
 import com.opspilot.auth.OrganizationAction;
 import com.opspilot.common.outbox.OutboxEvent;
 import com.opspilot.common.outbox.OutboxEventRepository;
+import com.opspilot.common.outbox.OutboxEventType;
 import com.opspilot.common.web.BadRequestException;
 import com.opspilot.common.web.ConflictException;
 import com.opspilot.common.web.IdempotencyConflictException;
@@ -76,7 +77,7 @@ public class AgentRunService {
   static final int MAX_PAGE_SIZE = 100;
 
   /** docs/API_CONTRACT.md's Redis envelope names this type; T24 publishes it, T25 consumes it. */
-  private static final String RUN_REQUESTED_EVENT = "agent.run.requested";
+  private static final String RUN_REQUESTED_EVENT = OutboxEventType.AGENT_RUN_REQUESTED;
 
   private final AgentRunRepository runs;
   private final AgentStepRepository steps;

@@ -8,6 +8,7 @@ import com.opspilot.auth.OrganizationAccessService;
 import com.opspilot.auth.OrganizationAction;
 import com.opspilot.common.outbox.OutboxEvent;
 import com.opspilot.common.outbox.OutboxEventRepository;
+import com.opspilot.common.outbox.OutboxEventType;
 import com.opspilot.common.web.NotFoundException;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +36,7 @@ import tools.jackson.databind.ObjectMapper;
 public class ApprovalDecisionService {
 
   /** docs/API_CONTRACT.md's Redis envelope type for continuing a paused run. */
-  private static final String RUN_RESUME_EVENT = "agent.run.resume";
+  private static final String RUN_RESUME_EVENT = OutboxEventType.AGENT_RUN_RESUME;
 
   private final ApprovalRepository approvals;
   private final ApprovalService approvalService;

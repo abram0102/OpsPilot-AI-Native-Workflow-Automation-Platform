@@ -121,4 +121,36 @@ public class OutboxEvent {
   public Instant getCreatedAt() {
     return createdAt;
   }
+
+  /**
+   * Marks the row published. Terminal: a published event is never republished from this row.
+   *
+   * <p>Note the ordering this cannot protect against — the stream write happens first, so a crash
+   * between `XADD` and this update leaves the row PENDING and the event is published again with the
+   * same {@code eventId}. That duplicate is by design (docs/DECISIONS.md ADR-048); what must never
+   * happen is a *lost* event, which is why the update follows the publish rather than preceding it.
+   */
+  void markPublished(Instant at) {
+    this.status = OutboxEventStatus.PUBLISHED;
+    this.publishedAt = at;
+    this.nextAttemptAt = null;
+  }
+
+  /** Records a failed publish and when to try again. */
+  void recordFailedAttempt(Instant nextAttemptAt) {
+    this.attempts += 1;
+    this.nextAttemptAt = nextAttemptAt;
+  }
+
+  /**
+   * Gives up on the row, leaving it visible rather than silently stuck.
+   *
+   * <p>docs/SECURITY_AND_TESTING.md: "poison message -> DLQ or terminal failure with
+   * operator-visible reason; no endless tight retry loop." DEAD is that terminal state on the
+   * publisher side; it is deliberately not deleted, so an operator can still see what failed.
+   */
+  void markDead() {
+    this.status = OutboxEventStatus.DEAD;
+    this.nextAttemptAt = null;
+  }
 }

@@ -5,6 +5,12 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
   jackson:
     default-property-inclusion: non_null
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_COMMAND_TIMEOUT:2s}
 
 server:
   port: ${API_PORT:8080}
@@ -27,6 +33,16 @@ app:
     internal-service:
       audience: ${INTERNAL_SERVICE_AUDIENCE:https://internal.opspilot.local}
       signing-secret: ${INTERNAL_SERVICE_SIGNING_SECRET:}
+  outbox:
+    stream-key: ${REDIS_STREAM_NAME:opspilot:events}
+    consumer-group: ${REDIS_CONSUMER_GROUP:agent-workers}
+    batch-size: ${OUTBOX_BATCH_SIZE:100}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
+    backoff-base: ${OUTBOX_BACKOFF_BASE:PT1S}
+    publisher:
+      # Off by default so tests drive publishBatch() directly; local and production enable it.
+      enabled: ${OUTBOX_PUBLISHER_ENABLED:false}
+      interval-ms: ${OUTBOX_PUBLISHER_INTERVAL_MS:2000}
   invitations:
     # ISO-8601 duration. No invitation email is sent in V1 (docs/TASKS.md T09); the token is
     # shown once, to the owner/admin who created it, via a protected response.
@@ -48,6 +64,10 @@ springdoc:
 # T13: local filesystem adapter by default; S3 only when storage.provider=s3 (Gate H3 — a real
 # AWS bucket/credentials, not needed for this provider's default). .env.example documents these
 # as STORAGE_PROVIDER/STORAGE_LOCAL_DIR/AWS_S3_BUCKET/AWS_REGION.
+# T24: the outbox publisher. Publication is a separate transaction from the business write,
+# so Redis being unavailable delays delivery and never fails a request — the backlog accrues in
+# `outbox_events` and drains on recovery. Deliberately disabled by default: tests drive
+# publishBatch() directly rather than waiting on a timer, and the local profile turns it on.
 storage:
   provider: ${STORAGE_PROVIDER:local}
   local-dir: ${STORAGE_LOCAL_DIR:.local-storage}
@@ -67,6 +87,14 @@ management:
       probes:
         enabled: true
       show-details: never
+      group:
+        # T24: deliberately readinessState + db only. Redis is NOT in here. An unreachable Redis
+        # delays event delivery; it does not stop the API from serving requests, and the outbox
+        # keeps the backlog durable until Redis returns. Removing a healthy API from rotation
+        # because a queue is down would turn a delivery delay into an outage. Redis still appears
+        # in the full /actuator/health document, so the outage stays visible to operators.
+        readiness:
+          include: readinessState,db
   health:
     livenessstate:
       enabled: true

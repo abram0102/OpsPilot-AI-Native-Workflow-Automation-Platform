@@ -39,6 +39,16 @@ class ConfigurationPlaceholderTest {
   private static final Pattern VALUE_WITHOUT_DEFAULT =
       Pattern.compile("@Value\\(\\s*\"\\$\\{([^:}]+)}\"");
 
+  /**
+   * {@code @Scheduled(fixedDelayString = "${some.key}")} and friends, added in T24.
+   *
+   * <p>Same failure mode as {@code @Value} and the same invisibility locally: a misplaced key makes
+   * the scheduled bean fail to start, and every context-loading test needs Docker.
+   */
+  private static final Pattern SCHEDULED_WITHOUT_DEFAULT =
+      Pattern.compile(
+          "(?:fixedDelayString|fixedRateString|initialDelayString|cron)\\s*=\\s*\"\\$\\{([^:}]+)}\"");
+
   @Test
   void everyPlaceholderWithoutADefaultIsDefinedInTheShippedConfiguration() throws IOException {
     Map<String, String> flattened = new LinkedHashMap<>();
@@ -48,11 +58,14 @@ class ConfigurationPlaceholderTest {
 
     Set<String> missing = new LinkedHashSet<>();
     for (Path source : javaSources()) {
-      Matcher matcher = VALUE_WITHOUT_DEFAULT.matcher(Files.readString(source));
-      while (matcher.find()) {
-        String key = matcher.group(1).trim();
-        if (!flattened.containsKey(key)) {
-          missing.add(key + "  (referenced by " + source.getFileName() + ")");
+      String body = Files.readString(source);
+      for (Pattern pattern : List.of(VALUE_WITHOUT_DEFAULT, SCHEDULED_WITHOUT_DEFAULT)) {
+        Matcher matcher = pattern.matcher(body);
+        while (matcher.find()) {
+          String key = matcher.group(1).trim();
+          if (!flattened.containsKey(key)) {
+            missing.add(key + "  (referenced by " + source.getFileName() + ")");
+          }
         }
       }
     }

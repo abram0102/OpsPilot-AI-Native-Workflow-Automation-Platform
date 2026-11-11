@@ -10,11 +10,10 @@ Redis dispatcher not yet implemented").
 carries — `{"documentId", "organizationId"}` — so T25 wires a consumer to this
 function without reshaping anything.
 
-One mismatch to settle in T24, noted rather than silently papered over: the
-outbox row's `event_type` is `knowledge.document.queued`, while
-docs/API_CONTRACT.md names the Redis envelope `knowledge.ingest.requested`.
-This handler is indifferent to the name — it reads the payload — but the two
-need reconciling when the publisher is written.
+The name mismatch noted here during T16 is settled: T24 renamed the outbox
+row's `event_type` to `knowledge.ingest.requested`, matching the envelope in
+docs/API_CONTRACT.md. This handler never read the name — it reads the payload —
+so nothing here changed.
 """
 
 from __future__ import annotations

@@ -5,6 +5,7 @@ import com.opspilot.auth.OrganizationAccessService;
 import com.opspilot.auth.OrganizationAction;
 import com.opspilot.common.outbox.OutboxEvent;
 import com.opspilot.common.outbox.OutboxEventRepository;
+import com.opspilot.common.outbox.OutboxEventType;
 import com.opspilot.common.web.BadRequestException;
 import com.opspilot.common.web.ConflictException;
 import com.opspilot.common.web.NotFoundException;
@@ -148,7 +149,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 organizationId.toString()));
     outboxEvents.save(
         new OutboxEvent(
-            "knowledge.document.queued",
+            OutboxEventType.KNOWLEDGE_INGEST_REQUESTED,
             "knowledge_document",
             saved.getId(),
             organizationId,
