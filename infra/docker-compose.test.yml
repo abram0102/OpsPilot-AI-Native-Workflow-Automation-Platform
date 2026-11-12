@@ -1,0 +1,55 @@
+# Isolated throwaway services for the test suites (docs/TASKS.md T29).
+#
+# Separate from infra/docker-compose.yml on purpose, and not an override of it. Three differences
+# matter, and all three exist because of a real incident recorded in docs/PROGRESS.md T28: the Java
+# external-mode tests had been pointed at the development database and wiped its Flyway history.
+#
+#   1. Its own project name and container names, so `make infra-down` cannot stop it and it cannot
+#      stop the development stack.
+#   2. Its own ports (default 55433/56380), so a test run cannot connect to a developer's servers
+#      by accidentally inheriting POSTGRES_PORT.
+#   3. tmpfs instead of named volumes. The data is meant to die with the container — a test
+#      database that survives a run is a test database that accumulates state until something
+#      passes or fails for a reason nobody can reproduce.
+#
+# Run via `make infra-test-up` / `make infra-test-down`.
+
+name: opspilot-test
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: opspilot-test-postgres
+    environment:
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-opspilot_e2e}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-opspilot}
+      # Fixed, and deliberately not a secret: this server holds nothing but fictional test rows,
+      # is bound to loopback, and is destroyed after the run. A placeholder here is honest; a
+      # "strong" password would imply it was protecting something.
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-opspilot-test-local-only}
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-55433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${TEST_POSTGRES_USER:-opspilot} -d ${TEST_POSTGRES_DB:-opspilot_e2e}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: opspilot-test-redis
+    # No appendonly: nothing here is meant to survive, and fsync on every write is pure latency in
+    # a suite whose whole point is to be fast enough to run on every PR.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${TEST_REDIS_PORT:-56380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s

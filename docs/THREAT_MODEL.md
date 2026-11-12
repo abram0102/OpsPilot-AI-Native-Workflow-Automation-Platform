@@ -30,6 +30,9 @@ a hand-maintained file list.
 | A client-chosen `orgId`/`runId` used as authorization | Forwarded, never trusted; the API resolves membership from the token and the BFF copies its refusal back unchanged | `apps/web/src/app/api/run-status/route.test.ts::passes a forbidden run back as 403 rather than masking it as a server error` |
 | A polling endpoint quietly becoming a second read path | It returns three fields and nothing else | `apps/web/src/app/api/run-status/route.test.ts::returns only the three polling fields, never the rest of the run` |
 | An unauthenticated poll reaching the API on someone's behalf | No session → 401 before any outbound call | `apps/web/src/app/api/run-status/route.test.ts::answers 401 without calling the API at all when there is no session` |
+| A tenant's URL opened by a member of another tenant, in a real browser | The page resolves membership server-side and renders a refusal that names no tenant | `tests/e2e/tests/tenant-isolation.spec.ts::one tenant's owner cannot open the other tenant's pages` |
+| A signed-out visitor reaching tenant data | Redirected to sign-in before any render | `tests/e2e/tests/tenant-isolation.spec.ts::a signed-out visitor is not shown any tenant data` |
+| An AI draft published without a human, end to end | Publication requires an approval decision, checked server-side; the published text is the stored proposal | `tests/e2e/tests/agent-run.spec.ts::nothing is published while the approval is still pending`, `tests/e2e/tests/agent-run.spec.ts::a drafted reply is published only after a human approves it` |
 | CSRF on a state-changing BFF route | Next.js Server Actions carry their own origin check, and the one hand-written route is `GET`-only | **none** — there is no hand-written state-changing route to attack yet. A future `POST` route handler needs its own test here. |
 
 ## 2. Spring API boundary — authentication
@@ -158,8 +161,10 @@ a hand-maintained file list.
 
 Stated here rather than implied by absence:
 
-- **No browser-level E2E.** The UI flows (sign-in, two tenants, approve-and-publish) are covered at
-  the API and component level, not through a browser. That is **T29**.
+- ~~**No browser-level E2E.**~~ Closed by **T29**: `tests/e2e` drives the real stack in a browser
+  with two seeded tenants (`make test-e2e`). What remains uncovered there is breadth, not kind —
+  one browser on a PR, three nightly, and no coverage of the Auth0-hosted login page itself, which
+  is a third-party production host a test must not automate.
 - **No performance or abuse-rate testing.** Rate limiting (`RATE_LIMITED` in
   `docs/API_CONTRACT.md`) is specified and not implemented; there is no test because there is no
   mitigation. T31.

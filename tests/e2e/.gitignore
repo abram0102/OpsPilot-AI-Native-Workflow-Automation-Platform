@@ -1,0 +1,8 @@
+node_modules/
+# Playwright's own output. Traces and screenshots can contain session cookies and
+# whatever the page showed, so they are never committed — CI uploads them as a
+# short-retention artifact on failure instead (.github/workflows/ci.yml).
+test-results/
+playwright-report/
+blob-report/
+.auth/

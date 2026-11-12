@@ -669,3 +669,86 @@ own. It is now a concurrent queue that flattens each event to a string at append
 logback reuses and mutates event objects and holding references to read later is a second race on
 top of the first. Worth recording for the general point: a test that captures logs is a test with
 other people's threads in it, and running one class is not the same experiment as running the suite.
+
+## ADR-054 — T29: the E2E suite signs its own identities, and the stack script owns the key
+
+**Context.** T29 asks for "signed offline test identities" and browser coverage of the real flows.
+The obstacle is specific: the browser authenticates through Auth0, not through the API's test
+issuer, so minting an API token is not enough to be signed in — the session lives in an encrypted
+cookie the Next.js BFF owns, and the real sign-in is a redirect to a hosted page on a third-party
+production host that a test must not automate.
+
+**Decision 1 — use the SDK's own testing helper.** `@auth0/nextjs-auth0` exports
+`generateSessionCookie` from `./testing`. The harness mints an access token signed by the test
+issuer, wraps it in a session cookie encrypted with the same `AUTH0_SECRET` the app runs with, and
+sets it on the browser context. Two alternatives were rejected:
+
+- *A local mock OIDC server.* `Auth0Client` builds `https://${domain}`, so serving it over http on
+  localhost means fighting the SDK at every step, and the result is a second authentication
+  implementation to keep correct.
+- *A test-only sign-in route in the web app.* This is exactly the "publicly reachable test auth
+  shortcut" T28's acceptance forbids, and unlike the API's `/__test/` controllers — which live in
+  `src/test` and are checked by their load origin — a Next.js route is the shipped bundle. Nothing
+  test-only reaches the application; the whole mechanism lives in `tests/e2e`.
+
+**Decision 2 — the key is generated per run, not committed.** `TestIssuerConfig` generated its RSA
+key fresh at startup, which is right (no key material in source control) but leaves an
+out-of-process harness unable to sign anything the API accepts. It now also accepts
+`app.security.test-issuer.private-key`, and `scripts/e2e-stack.sh` generates a throwaway pair and
+hands it to both processes as an environment variable. The property is read inside a bean that does
+not exist unless `allow-test-issuer=true`, so it is inert on any other deployment —
+`TestIssuerKeyInjectionTest.aSuppliedKeyDoesNothingAtAllWhenTheTestIssuerIsOff` is the assertion
+that makes it safe to ship at all, and `ProductionSafetyGuard` already refuses to start if the flag
+is on in production. An unusable key fails startup rather than silently falling back to a generated
+one: the fallback would start the application and make every minted token fail its signature check,
+which reads as an application bug rather than a mistyped variable.
+
+**Decision 3 — a script owns the stack, not Playwright's `webServer`.** Playwright can start a
+server but cannot generate a key before the server it starts, and both the API and the web app need
+parts of the same secret. So `scripts/e2e-stack.sh` generates, starts, seeds, waits, runs and tears
+down. Running `playwright test` directly fails with an explicit sentence saying why, rather than a
+connection error.
+
+**Decision 4 — readiness is polled, never slept.** `wait_for` polls each service's own endpoint.
+A fixed sleep is the canonical flaky wait: too short on a cold runner, wasted time everywhere else.
+On timeout it prints the last 40 lines of that service's log, because "the web app did not start"
+without the build output is not an actionable failure.
+
+**Three bugs found by running the script, none of which any existing test could have caught.** All
+three share a shape: a silent fallback that produces a failure far from its cause.
+
+1. **`openssl genpkey -outform DER` emits PKCS#1, not PKCS#8** (OpenSSL 3.6; its PEM output *is*
+   PKCS#8). Java's `PKCS8EncodedKeySpec` rejected it with "algid parse error, not a sequence". The
+   script now takes the PEM and strips it. Found on the first run — and found *as a clear startup
+   failure* only because decision 2 refuses to fall back.
+2. **`make seed-demo` never exits.** `@EnableScheduling` on `OutboxPublisherSchedule` registers a
+   task scheduler whose threads are non-daemon, so the seeder created its two tenants, logged that
+   it had, and then hung forever. Interactively that looks finished and you press Ctrl-C, which is
+   why it survived from T06 to here; it only became visible when a script waited for the command to
+   return. The schedule is now `@Profile("!seed")` — a one-shot seeding command has no business
+   running a publisher loop — with the absence of a `TaskScheduler` asserted in
+   `SeedProfileIntegrationTest`.
+3. **`NODE_ENV=development` in `.env` silently breaks `next build`.** The script sources `.env` with
+   `set -a`, and `next build` only defaults `NODE_ENV` to production when nothing has set it. The
+   result is a development bundle whose build reaches prerendering and dies on
+   "/_global-error … Cannot read properties of null (reading 'useContext')" — which reads as an
+   application bug and is not one. The script now exports `NODE_ENV=production`, and `.env.example`
+   says why. (A fourth, related: a bare `nvm use` from the repository root finds no `.nvmrc` and
+   silently leaves Node 20, which ADR-010 records as breaking this toolchain. The script now names
+   `apps/web/.nvmrc` explicitly and logs the version it got.)
+
+**A fourth, caught by reading the script's own output.** The web app reported "ready after 0s" —
+which is not possible after a build. A `next start` left over from the previous run was answering,
+so a whole suite ran green against a server built from different code. A readiness check that
+passes because something *else* is listening is worse than one that times out, so the script now
+claims both ports up front and refuses to start if either is held, printing what holds it.
+
+**And a fifth, from the secret scan.** `AUTH0_DOMAIN="e2e.opspilot.invalid"` in the script matches
+gitleaks' generic-api-key rule, because the variable name contains AUTH0. Allowed on that single
+line rather than by a repository-wide exception that would also hide a real finding — the value is
+an RFC 2606 reserved name that can never resolve, chosen so that a stray OIDC exchange would fail
+loudly rather than quietly reach someone's tenant.
+
+**Rejected: putting Playwright in `apps/web`.** It is not part of the shipped application, and a
+test-runner dependency inside the web package puts it in the same dependency graph as the thing it
+tests. `tests/e2e` is its own package with its own lockfile — which the OSV job then scans too.

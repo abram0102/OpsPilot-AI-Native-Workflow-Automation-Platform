@@ -17,6 +17,7 @@ SHELL := /bin/bash
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e \
 	test-security test-security-external audit-deps \
+	infra-test-up infra-test-down \
 	eval-mock eval-real check seed-demo generate-contracts
 
 # Best-effort: switch to the Node version pinned in apps/web/.nvmrc if nvm is
@@ -57,6 +58,14 @@ infra-up: _ensure-docker _ensure-env ## Start local Postgres+pgvector and Redis 
 infra-down: _ensure-docker _ensure-env ## Stop local infra, volumes are kept — T01
 	$(COMPOSE) down
 
+COMPOSE_TEST := docker compose -f infra/docker-compose.test.yml
+
+infra-test-up: _ensure-docker ## Start throwaway Postgres+Redis for tests (tmpfs, own ports) — T29
+	$(COMPOSE_TEST) up -d --wait
+
+infra-test-down: _ensure-docker ## Stop and remove the throwaway test services — T29
+	$(COMPOSE_TEST) down -v
+
 infra-logs: _ensure-docker _ensure-env ## Tail local infra logs — T01
 	$(COMPOSE) logs -f
 
@@ -88,10 +97,13 @@ worker-health: _ensure-env ## Print queue depth, backlog and dead-letter count a
 web-dev: ## Run the Next.js frontend in dev mode — T04
 	cd apps/web && $(NVM_USE) pnpm dev
 
-lint: ## Run all linters across web/api/agent — T05
+lint: ## Run all linters across web/api/agent/e2e — T05, T29
 	cd apps/web && $(NVM_USE) pnpm lint
 	cd services/agent && uv run ruff check .
 	cd services/api && ./mvnw -q spotless:check
+	# The E2E package has no runtime of its own to lint, but it does have types — and a selector
+	# typo there only shows up minutes into a stack run, which is the worst place to find one.
+	cd tests/e2e && $(NVM_USE) pnpm typecheck
 
 # Surefire needs `!` on *each* comma-separated name to exclude all of them
 # (a bare name after a comma is a separate positive-include filter, not a
@@ -130,9 +142,11 @@ test-contract: _ensure-docker ## Verify generated OpenAPI/TS client has no drift
 	cd services/api && ./mvnw -q test -Dtest=OpenApiSpecDriftTest
 	cd packages/contracts && bash scripts/check-schema-drift.sh
 
-test-e2e: ## Run Playwright E2E against the local stack — T09+
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T09 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+test-e2e: _ensure-env ## Run Playwright E2E against a freshly started stack — T29
+	# Starts the API, worker and web app with a per-run test-issuer key, seeds the two demo
+	# tenants, runs Playwright, and tears everything down. Needs PostgreSQL and Redis already
+	# running (`make infra-up`, or your own servers). Uses its own database — see the script.
+	bash scripts/e2e-stack.sh
 
 # The suite is selected by tag/marker, not by a list of file names: a list is a thing that falls
 # out of date silently, and a security suite that quietly stopped covering an endpoint is worse
@@ -180,6 +194,14 @@ eval-real: ## Run the real-provider smoke evaluation — BILLABLE, requires Gate
 seed-demo: ## Seed fictional local/test tenants, users and tickets (needs infra-up first) — T06
 	cd services/api && ./mvnw -q spring-boot:run -Dspring-boot.run.profiles=local,seed
 
-check: ## Run static + unit + integration + contract + mock-eval checks — T29
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T29 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+# docs/SECURITY_AND_TESTING.md §4: "static checks + unit + integration + contract + offline eval".
+# E2E is deliberately NOT here — it starts servers and takes minutes, and §4 says browser/service
+# work "may be separate in CI". `make test-e2e` runs it.
+check: _ensure-docker ## Run static + unit + integration + contract + mock-eval checks — T29
+	$(MAKE) lint
+	$(MAKE) test-unit
+	$(MAKE) test-integration
+	$(MAKE) test-contract
+	$(MAKE) eval-mock
+	python3 scripts/check-threat-model.py
+	@printf '\033[32m✓ make check passed\033[0m\n'

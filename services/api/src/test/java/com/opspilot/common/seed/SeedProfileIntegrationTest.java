@@ -11,7 +11,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -32,6 +34,7 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles({"local", "seed"})
 class SeedProfileIntegrationTest {
 
+  @Autowired private ApplicationContext context;
   @Autowired private OrganizationRepository organizations;
   @Autowired private TicketRepository tickets;
 
@@ -59,5 +62,24 @@ class SeedProfileIntegrationTest {
                 .toList())
         .isNotEmpty()
         .allSatisfy(ticket -> assertThat(ticket.getSubject()).endsWith("(Demo)"));
+  }
+
+  @Test
+  void theSeedProfileRegistersNoSchedulerSoTheCommandCanActuallyFinish() {
+    // T29. `make seed-demo` seeded its tenants, logged that it had, and then hung forever: the
+    // `local` profile enables the outbox publisher, `OutboxPublisherSchedule` carries
+    // `@EnableScheduling`, and the task scheduler it registers runs non-daemon threads — so the
+    // JVM never exited. Interactively that looks like success and you press Ctrl-C, which is why
+    // it survived this long; it only became visible when a script waited for the command to
+    // return.
+    //
+    // Asserted on the TaskScheduler rather than on OutboxPublisherSchedule (which is
+    // package-private, and is only the thing that pulls scheduling in). The scheduler is the
+    // actual cause: no scheduler bean, no non-daemon pool, so the command returns.
+    assertThat(context.getBeanNamesForType(TaskScheduler.class))
+        .as(
+            "a one-shot seeding command must register no task scheduler — its threads are"
+                + " non-daemon, so one would keep the JVM alive after the seeding is done")
+        .isEmpty();
   }
 }

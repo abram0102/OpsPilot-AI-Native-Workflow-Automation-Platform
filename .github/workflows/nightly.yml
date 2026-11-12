@@ -1,0 +1,204 @@
+name: Nightly
+
+# docs/TASKS.md T29: "Automate smoke in PR CI, optional nightly more expensive tests."
+#
+# What is here is what genuinely costs too much per-PR but is worth knowing about by morning:
+# the E2E flows on the two browsers the PR run skips, and the same suite repeated to surface a
+# flake that a single green run would hide.
+#
+# What is deliberately NOT here: anything that calls a paid provider. The real-model evaluation is
+# Gate H2 in docs/MANUAL_SETUP.md — a human decision with a budget attached (AGENTS.md rule 15), so
+# it is never on a timer. No AWS or LLM secret is read by this workflow either.
+
+on:
+  schedule:
+    # 04:17 UTC. Off the hour on purpose: GitHub's scheduler queues heavily at :00, and a job that
+    # starts 20 minutes late every night is a job whose failures get noticed late too.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-browsers:
+    name: E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: opspilot_e2e
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot-ci-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: services/api/pom.xml
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/agent/uv.lock
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            apps/web/pnpm-lock.yaml
+            tests/e2e/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: |
+          (cd apps/web && pnpm install --frozen-lockfile)
+          (cd tests/e2e && pnpm install --frozen-lockfile)
+          (cd services/agent && uv sync --locked)
+      - name: Install Playwright browser
+        working-directory: tests/e2e
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Create the environment file the stack script reads
+        run: |
+          cp .env.example .env
+          {
+            echo "POSTGRES_HOST=127.0.0.1"
+            echo "POSTGRES_PORT=5432"
+            echo "POSTGRES_USER=opspilot"
+            echo "POSTGRES_PASSWORD=opspilot-ci-local-only"
+            echo "REDIS_HOST=127.0.0.1"
+            echo "REDIS_PORT=6379"
+            echo "INTERNAL_SERVICE_SIGNING_SECRET=ci-only-internal-service-secret-$RANDOM$RANDOM"
+          } >> .env
+
+      - name: Run the E2E suite
+        env:
+          E2E_POSTGRES_DB: opspilot_e2e
+          E2E_BROWSER: ${{ matrix.browser }}
+          AI_MODE: mock
+        # The script forwards its arguments to Playwright; `make` would read them as goals.
+        run: bash scripts/e2e-stack.sh
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-e2e-${{ matrix.browser }}
+          path: |
+            tests/e2e/test-results/
+            tests/e2e/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  flake-hunt:
+    name: Flake hunt (E2E repeated)
+    runs-on: ubuntu-latest
+    # The PR run allows one retry, which absorbs genuine infrastructure noise but also means a
+    # test that fails one time in five still shows green. This runs the suite three times with no
+    # retries at all: if any repeat fails, the suite is flaky and that is worth a morning's
+    # attention before it costs someone an afternoon.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: opspilot_e2e
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot-ci-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: services/api/pom.xml
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/agent/uv.lock
+      - run: corepack enable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            apps/web/pnpm-lock.yaml
+            tests/e2e/pnpm-lock.yaml
+      - name: Install dependencies
+        run: |
+          (cd apps/web && pnpm install --frozen-lockfile)
+          (cd tests/e2e && pnpm install --frozen-lockfile)
+          (cd services/agent && uv sync --locked)
+      - name: Install Playwright browser
+        working-directory: tests/e2e
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Create the environment file the stack script reads
+        run: |
+          cp .env.example .env
+          {
+            echo "POSTGRES_HOST=127.0.0.1"
+            echo "POSTGRES_PORT=5432"
+            echo "POSTGRES_USER=opspilot"
+            echo "POSTGRES_PASSWORD=opspilot-ci-local-only"
+            echo "REDIS_HOST=127.0.0.1"
+            echo "REDIS_PORT=6379"
+            echo "INTERNAL_SERVICE_SIGNING_SECRET=ci-only-internal-service-secret-$RANDOM$RANDOM"
+          } >> .env
+      - name: Run the E2E suite three times, no retries
+        env:
+          E2E_POSTGRES_DB: opspilot_e2e
+          AI_MODE: mock
+        run: bash scripts/e2e-stack.sh --repeat-each=3 --retries=0
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-flake-hunt
+          path: |
+            tests/e2e/test-results/
+            tests/e2e/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -11,6 +11,31 @@ Baseline targets:
 
 Version changes should be made as explicit dependency update tickets and accompanied by smoke tests.
 
+## T29 notes — 2026-11-12
+
+New package `tests/e2e` (`@opspilot/e2e`), with its own `package.json` and `pnpm-lock.yaml`. Kept
+separate from `apps/web` on purpose: it is not part of the shipped application, and a Playwright
+dependency inside the web package would end up in the same dependency graph as the thing it tests.
+
+- **`@playwright/test` 1.65.0** — current stable. Browsers are installed by
+  `playwright install chromium` rather than vendored; CI caches `~/.cache/ms-playwright` keyed on
+  this package's lockfile, so the ~100 MB download happens once per Playwright bump.
+- **`jose` 6.2.17** — signs the test-issuer access token. Chosen over `jsonwebtoken` because it is
+  Web Crypto based and needs no Node-specific shims, and over hand-rolling RS256 because signing
+  code is exactly the wrong place to be clever.
+- **`@auth0/nextjs-auth0` 4.33.0** — the *same version* `apps/web` runs, and present here only for
+  its `./testing` export's `generateSessionCookie`. Pinned exactly rather than by range: the thing
+  being reused is a cookie encryption format, and a minor-version drift between the two packages
+  would produce a cookie the app silently cannot read. If the web app's version moves, this one
+  must move with it.
+- **`typescript` 5.9.3**, **`@types/node` 26.6.6** — matching `apps/web`, so the two TypeScript
+  setups do not disagree about library types.
+
+Not added, and worth recording as rejected: a mock OIDC provider package (`oauth2-mock-server` and
+similar). `Auth0Client` builds `https://${domain}`, so pointing it at a local http server means
+fighting the SDK, and the result would be a second authentication implementation to keep correct.
+The SDK's own testing helper avoids the problem rather than working around it.
+
 ## T28 notes — 2026-11-12
 
 - **No new runtime dependency.** T28 adds tests, a Makefile target and a CI job; nothing was added

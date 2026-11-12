@@ -27,6 +27,12 @@ app:
     # Default false (safe); local profile turns it on. ProductionSafetyGuard
     # refuses to start if this is ever true under the "production" profile.
     allow-test-issuer: ${API_ALLOW_TEST_ISSUER:false}
+    test-issuer:
+      # T29: lets an out-of-process harness (Playwright) mint tokens this API accepts, as base64
+      # PKCS#8. The E2E harness generates it per run and passes it in; it is never committed.
+      # Read only inside a bean that does not exist unless allow-test-issuer is on, so setting it
+      # on a production deployment achieves nothing.
+      private-key: ${API_TEST_ISSUER_PRIVATE_KEY:}
     # T21: the machine-only internal action API. A distinct audience and a distinct signing key,
     # so a user's browser token cannot reach /internal/** even by accident — the two filter
     # chains validate against different decoders entirely (docs/DECISIONS.md ADR-045).

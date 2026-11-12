@@ -34,6 +34,7 @@
 | `docs/API_CONTRACT.md` | Public/internal endpoints, schemas, permissions, error examples |
 | `docs/SECURITY_AND_TESTING.md` | Threat model, test cases, gates, metrics, evaluation design |
 | `docs/THREAT_MODEL.md` | Threat-to-test map; `scripts/check-threat-model.py` fails CI if a referenced test is renamed |
+| `tests/e2e/README.md` | How the Playwright suite signs in offline and what it covers (`make test-e2e`) |
 | `docs/TASKS.md` | T00–T36 sequential implementable tickets, deliverables and acceptance |
 | `docs/CODEX_OPERATOR_PROMPT.md` | Copy/paste Codex prompt and session contract |
 | `docs/MANUAL_SETUP.md` | Human-only account, credential, payment, and deployment gates |

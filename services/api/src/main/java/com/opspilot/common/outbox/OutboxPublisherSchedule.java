@@ -3,6 +3,7 @@ package com.opspilot.common.outbox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,9 +18,19 @@ import org.springframework.stereotype.Component;
  * <p>Enabled by {@code app.outbox.publisher.enabled}, which {@code application-local.yml} and
  * production turn on. It stays off in tests, matching how the test issuer and the storage adapters
  * are already gated.
+ *
+ * <p><b>Never under the {@code seed} profile</b> (T29). {@code @EnableScheduling} registers a
+ * {@code ThreadPoolTaskScheduler} whose threads are non-daemon, so its mere presence keeps the JVM
+ * alive after the work is done. {@code make seed-demo} is a one-shot command activated as {@code
+ * local,seed} — it inherits {@code local}'s enabled publisher, and so it seeded its two tenants,
+ * printed that it had, and then hung forever. Nobody noticed because the output looks finished and
+ * you press Ctrl-C; it was found when a script tried to wait for the command to return. A one-shot
+ * seeding run has no business publishing a backlog in the background anyway — the API process does
+ * that.
  */
 @Component
 @EnableScheduling
+@Profile("!seed")
 @ConditionalOnProperty(prefix = "app.outbox.publisher", name = "enabled", havingValue = "true")
 class OutboxPublisherSchedule {
 
