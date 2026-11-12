@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { UploadDocumentForm, type UploadDocumentFormProps } from "./UploadDocumentForm";
+import ui from "@/styles/ui.module.css";
 
 /**
  * Thin wrapper that puts {@link UploadDocumentForm} in a native `<dialog>` — focus trapping and
@@ -19,9 +20,11 @@ export function UploadDocumentDialog({ action }: Pick<UploadDocumentFormProps, "
       <dialog ref={dialogRef} aria-labelledby="upload-document-heading">
         <h2 id="upload-document-heading">Upload document</h2>
         <UploadDocumentForm action={action} />
-        <button type="button" onClick={() => dialogRef.current?.close()}>
-          Close
-        </button>
+        <div className={ui.actionsEnd}>
+          <button type="button" className={ui.secondary} onClick={() => dialogRef.current?.close()}>
+            Close
+          </button>
+        </div>
       </dialog>
     </>
   );

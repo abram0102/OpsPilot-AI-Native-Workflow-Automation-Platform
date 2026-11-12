@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef } from "react";
+import ui from "@/styles/ui.module.css";
 import type { CreateTicketState } from "./actions";
 
 const initialState: CreateTicketState = {};
@@ -22,34 +23,49 @@ export function CreateTicketDialog({ action }: CreateTicketDialogProps) {
       </button>
       <dialog ref={dialogRef} aria-labelledby="create-ticket-heading">
         <h2 id="create-ticket-heading">Create ticket</h2>
-        <form action={formAction}>
-          <label htmlFor="ticket-customer-name">Customer name</label>
-          <br />
-          <input id="ticket-customer-name" name="customerName" required />
-          <br />
-          <label htmlFor="ticket-subject">Subject</label>
-          <br />
-          <input id="ticket-subject" name="subject" required />
-          <br />
-          <label htmlFor="ticket-description">Description</label>
-          <br />
-          <textarea id="ticket-description" name="description" required />
-          <br />
-          <label htmlFor="ticket-priority">Priority</label>
-          <br />
-          <select id="ticket-priority" name="priority" defaultValue="MEDIUM">
-            <option value="LOW">Low</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HIGH">High</option>
-          </select>
-          <br />
-          {state.error && <p role="alert">{state.error}</p>}
-          <button type="button" onClick={() => dialogRef.current?.close()}>
-            Cancel
-          </button>
-          <button type="submit" disabled={pending}>
-            {pending ? "Creating…" : "Create"}
-          </button>
+        <form action={formAction} className={ui.formGrid}>
+          <div className={ui.field}>
+            <label htmlFor="ticket-customer-name">Customer name</label>
+            <input id="ticket-customer-name" name="customerName" required />
+          </div>
+
+          <div className={ui.field}>
+            <label htmlFor="ticket-subject">Subject</label>
+            <input id="ticket-subject" name="subject" required />
+          </div>
+
+          <div className={ui.field}>
+            <label htmlFor="ticket-description">Description</label>
+            <textarea id="ticket-description" name="description" required />
+          </div>
+
+          <div className={ui.field}>
+            <label htmlFor="ticket-priority">Priority</label>
+            <select id="ticket-priority" name="priority" defaultValue="MEDIUM">
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+          </div>
+
+          {state.error && (
+            <p role="alert" className={ui.alertError}>
+              {state.error}
+            </p>
+          )}
+
+          <div className={ui.actionsEnd}>
+            <button
+              type="button"
+              className={ui.secondary}
+              onClick={() => dialogRef.current?.close()}
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={pending}>
+              {pending ? "Creating…" : "Create"}
+            </button>
+          </div>
         </form>
       </dialog>
     </>

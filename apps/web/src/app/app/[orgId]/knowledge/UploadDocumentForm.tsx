@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { UPLOAD_ACCEPT_ATTRIBUTE, rejectionReasonFor } from "@/lib/api/knowledge-rules";
 import type { UploadDocumentState } from "./actions";
+import ui from "@/styles/ui.module.css";
 import styles from "./UploadDocumentForm.module.css";
 
 const initialState: UploadDocumentState = {};
@@ -51,7 +52,7 @@ export function UploadDocumentForm({ action, onUploaded }: UploadDocumentFormPro
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className={ui.formGrid}>
       <div
         className={`${styles.dropZone} ${draggingOver ? styles.dragging : ""}`}
         onDragOver={(event) => {
@@ -65,9 +66,8 @@ export function UploadDocumentForm({ action, onUploaded }: UploadDocumentFormPro
           offer(event.dataTransfer.files[0]);
         }}
       >
-        <p>Drag a file here, or choose one below.</p>
+        <p className={styles.dropHint}>Drag a file here, or choose one below.</p>
         <label htmlFor="knowledge-file">File (.txt, .md or .pdf, up to 10 MiB)</label>
-        <br />
         <input
           id="knowledge-file"
           type="file"
@@ -78,19 +78,31 @@ export function UploadDocumentForm({ action, onUploaded }: UploadDocumentFormPro
       </div>
 
       {selected && (
-        <p>
+        <p className={ui.hint}>
           Selected: {selected.name} ({selected.size} bytes)
         </p>
       )}
-      {localError && <p role="alert">{localError}</p>}
-      {state.error && <p role="alert">{state.error}</p>}
+      {localError && (
+        <p role="alert" className={ui.alertError}>
+          {localError}
+        </p>
+      )}
+      {state.error && (
+        <p role="alert" className={ui.alertError}>
+          {state.error}
+        </p>
+      )}
       {state.uploadedFilename && (
-        <p role="status">Uploaded {state.uploadedFilename}. It is queued for indexing.</p>
+        <p role="status" className={ui.alertSuccess}>
+          Uploaded {state.uploadedFilename}. It is queued for indexing.
+        </p>
       )}
 
-      <button type="submit" disabled={pending || Boolean(localError)}>
-        {pending ? "Uploading…" : "Upload"}
-      </button>
+      <div className={ui.actionsEnd}>
+        <button type="submit" disabled={pending || Boolean(localError)}>
+          {pending ? "Uploading…" : "Upload"}
+        </button>
+      </div>
     </form>
   );
 }

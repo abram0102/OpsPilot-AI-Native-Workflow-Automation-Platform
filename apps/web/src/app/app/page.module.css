@@ -1,0 +1,47 @@
+/*
+ * The organization selector sits OUTSIDE the AppShell — at this point there is
+ * no organization to scope a nav to — so it supplies its own centred canvas.
+ */
+
+.wrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-7) var(--space-5);
+  background:
+    radial-gradient(60rem 30rem at 50% -10rem, var(--brand-50), transparent 70%), var(--background);
+}
+
+.orgList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.orgCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.orgCard:hover {
+  text-decoration: none;
+  border-color: var(--brand-400);
+  box-shadow: var(--shadow-md);
+}
+
+.orgName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

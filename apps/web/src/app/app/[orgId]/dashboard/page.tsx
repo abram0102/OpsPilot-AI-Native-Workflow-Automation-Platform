@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { fetchMe } from "@/lib/api/me";
 import { listTickets, type TicketStatus } from "@/lib/api/tickets";
+import ui from "@/styles/ui.module.css";
 
 export const instant = false;
 
@@ -27,17 +28,25 @@ export default async function DashboardPage({ params }: PageProps<"/app/[orgId]/
   }
   if (!me.organizations.some((org) => org.organizationId === orgId)) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
 
   return (
-    <div>
-      <h1>Dashboard</h1>
-      <Suspense fallback={<p>Loading ticket counts…</p>}>
+    <div className={ui.page}>
+      <div className={ui.pageHeader}>
+        <div className={ui.pageHeaderText}>
+          <h1>Dashboard</h1>
+          <p className={ui.lead}>
+            Open tickets by status for this organization. Select a status to see the tickets behind
+            it.
+          </p>
+        </div>
+      </div>
+      <Suspense fallback={<p className={ui.lead}>Loading ticket counts…</p>}>
         <TicketCounts orgId={orgId} />
       </Suspense>
     </div>
@@ -54,13 +63,15 @@ async function TicketCounts({ orgId }: { orgId: string }) {
   );
 
   return (
-    <dl>
+    <dl className={ui.statGrid}>
       {counts.map(({ status, label }) => (
-        <div key={status}>
-          <dt>
-            <Link href={`/app/${orgId}/tickets?status=${status}`}>{formatStatus(status)}</Link>
+        <div key={status} className={ui.statTile}>
+          <dt className={ui.statLabel}>
+            <Link className={ui.stretchLink} href={`/app/${orgId}/tickets?status=${status}`}>
+              {formatStatus(status)}
+            </Link>
           </dt>
-          <dd>{label}</dd>
+          <dd className={ui.statValue}>{label}</dd>
         </div>
       ))}
     </dl>

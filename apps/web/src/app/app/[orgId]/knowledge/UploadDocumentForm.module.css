@@ -1,11 +1,31 @@
 .dropZone {
-  padding: 1rem;
-  border: 2px dashed var(--border);
-  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
   text-align: center;
+  transition:
+    border-color 0.12s ease,
+    background-color 0.12s ease;
 }
 
+/* While a file is over the zone the dashed edge becomes solid brand — the one
+   moment where a colour change is the clearest possible feedback. */
 .dragging {
   border-style: solid;
-  background: var(--surface);
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+
+.dropHint {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.dropZone input[type="file"] {
+  max-width: 22rem;
 }

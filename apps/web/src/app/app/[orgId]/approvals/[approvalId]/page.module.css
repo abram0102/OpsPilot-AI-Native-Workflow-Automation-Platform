@@ -1,0 +1,46 @@
+.page {
+  /* Relative, not the "@/" TypeScript alias: `composes ... from` is resolved by
+     the CSS pipeline, which does not read tsconfig paths. */
+  composes: page from "../../../../../styles/ui.module.css";
+  /* Wider than `pageNarrow` (44rem) — at that width the decision column left
+     half the content area empty on a desktop — but still a contained measure
+     rather than the full 76rem a table page uses. */
+  max-width: 54rem;
+}
+
+/*
+ * The proposal is the one piece of text on this page a model wrote, and
+ * approving publishes it verbatim. It is therefore given the most visual
+ * weight on the page and a gold edge that matches the agent-authored messages
+ * in the ticket thread — a reader should never have to work out which block is
+ * the machine's words.
+ */
+.proposal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-lg);
+  line-height: 1.65;
+}
+
+.evidenceList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.evidenceItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.evidenceTitle {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}

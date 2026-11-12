@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { fetchMe } from "@/lib/api/me";
 import { listApprovals, type ApprovalStatus } from "@/lib/api/approvals";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import ui from "@/styles/ui.module.css";
+import styles from "./page.module.css";
 
 export const instant = false;
 
@@ -28,9 +31,9 @@ export default async function ApprovalsPage({
   const membership = me.organizations.find((org) => org.organizationId === orgId);
   if (!membership) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
@@ -38,9 +41,9 @@ export default async function ApprovalsPage({
   const canDecide = membership.role === "ADMIN" || membership.role === "OWNER";
   if (!canDecide) {
     return (
-      <div>
+      <div className={ui.pageNarrow}>
         <h1>Approvals</h1>
-        <p>
+        <p className={ui.alertNotice}>
           Only owners and admins can review the agent&apos;s proposed replies. Ask an administrator
           if you need access.
         </p>
@@ -52,55 +55,71 @@ export default async function ApprovalsPage({
   const approvals = await listApprovals(orgId, statusFilter);
 
   return (
-    <div>
-      <h1>Approvals</h1>
-      <p>
-        The agent never publishes a reply on its own. Each proposal below is exactly what would be
-        posted, and nothing is sent until someone approves it.
-      </p>
+    <div className={ui.page}>
+      <div className={ui.pageHeaderText}>
+        <h1>Approvals</h1>
+        <p className={ui.lead}>
+          The agent never publishes a reply on its own. Each proposal below is exactly what would be
+          posted, and nothing is sent until someone approves it.
+        </p>
+      </div>
 
-      <form method="get">
-        <label htmlFor="approval-status">Status</label>
-        <br />
-        <select id="approval-status" name="status" defaultValue={statusFilter ?? "PENDING"}>
-          {STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-        <br />
-        <button type="submit">Apply filter</button>
+      <form method="get" className={ui.toolbar}>
+        <div className={ui.fieldInline}>
+          <label htmlFor="approval-status">Status</label>
+          <select id="approval-status" name="status" defaultValue={statusFilter ?? "PENDING"}>
+            {STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" className={ui.secondary}>
+          Apply filter
+        </button>
       </form>
 
       {approvals.length === 0 ? (
-        <p>Nothing is waiting for a decision.</p>
+        <div className={ui.empty}>
+          <p>Nothing is waiting for a decision.</p>
+        </div>
       ) : (
-        <table>
-          <caption>Proposals awaiting review</caption>
-          <thead>
-            <tr>
-              <th scope="col">Proposed reply</th>
-              <th scope="col">Action</th>
-              <th scope="col">Status</th>
-              <th scope="col">Raised</th>
-            </tr>
-          </thead>
-          <tbody>
-            {approvals.map((approval) => (
-              <tr key={approval.id}>
-                <th scope="row">
-                  <Link href={`/app/${orgId}/approvals/${approval.id}`}>
-                    {preview(approval.proposalBody)}
-                  </Link>
-                </th>
-                <td>{approval.actionType}</td>
-                <td>{approval.status}</td>
-                <td>{new Date(approval.createdAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className={ui.tableCard}>
+          <div className={ui.tableScroll}>
+            <table>
+              <caption className={styles.caption}>Proposals awaiting review</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Proposed reply</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Raised</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvals.map((approval) => (
+                  <tr key={approval.id}>
+                    <th scope="row" className={styles.proposalCell}>
+                      <Link href={`/app/${orgId}/approvals/${approval.id}`}>
+                        {preview(approval.proposalBody)}
+                      </Link>
+                    </th>
+                    <td>
+                      <span className={ui.badge}>{approval.actionType.replaceAll("_", " ")}</span>
+                    </td>
+                    <td>
+                      <StatusBadge value={approval.status} />
+                    </td>
+                    <td className={styles.timeCell}>
+                      {new Date(approval.createdAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

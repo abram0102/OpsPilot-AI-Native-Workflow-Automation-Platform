@@ -1,0 +1,33 @@
+.inviteRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.inviteRow > :first-child {
+  flex: 1 1 18rem;
+}
+
+.tokenPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  border: 1px solid var(--brand-300);
+  background: var(--brand-50);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* The link is long, single-use and meant to be copied, so it gets monospace
+   and is allowed to wrap anywhere rather than overflowing the panel. */
+.tokenLink {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}

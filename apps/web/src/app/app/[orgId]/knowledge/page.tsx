@@ -4,6 +4,7 @@ import { listKnowledgeDocuments } from "@/lib/api/knowledge";
 import { deleteDocumentAction, uploadDocumentAction } from "./actions";
 import { KnowledgeTable } from "./KnowledgeTable";
 import { UploadDocumentDialog } from "./UploadDocumentDialog";
+import ui from "@/styles/ui.module.css";
 
 export const instant = false;
 
@@ -26,9 +27,9 @@ export default async function KnowledgePage({ params }: PageProps<"/app/[orgId]/
   const membership = me.organizations.find((org) => org.organizationId === orgId);
   if (!membership) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
@@ -40,14 +41,17 @@ export default async function KnowledgePage({ params }: PageProps<"/app/[orgId]/
   const documents = await listKnowledgeDocuments(orgId);
 
   return (
-    <div>
-      <h1>Knowledge</h1>
-      <p>
-        Upload {".txt"}, {".md"} or {".pdf"} files up to 10 MiB. Uploaded documents stay at{" "}
-        <strong>QUEUED</strong> until the ingestion worker indexes them.
-      </p>
-
-      {canUpload && <UploadDocumentDialog action={uploadDocumentAction.bind(null, orgId)} />}
+    <div className={ui.page}>
+      <div className={ui.pageHeader}>
+        <div className={ui.pageHeaderText}>
+          <h1>Knowledge</h1>
+          <p className={ui.lead}>
+            Upload {".txt"}, {".md"} or {".pdf"} files up to 10 MiB. Uploaded documents stay at{" "}
+            <strong>QUEUED</strong> until the ingestion worker indexes them.
+          </p>
+        </div>
+        {canUpload && <UploadDocumentDialog action={uploadDocumentAction.bind(null, orgId)} />}
+      </div>
 
       <KnowledgeTable
         documents={documents}

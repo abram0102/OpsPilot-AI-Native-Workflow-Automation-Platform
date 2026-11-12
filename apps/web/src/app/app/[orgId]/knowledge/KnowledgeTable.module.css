@@ -1,29 +1,37 @@
-.badge {
-  display: inline-block;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  text-transform: lowercase;
+/*
+ * Status pills now come from styles/ui.module.css (`ui.badge*`) so ingestion
+ * states match ticket and approval states. What stays here is the layout of
+ * this specific table — and the error code, which is a code, not prose.
+ */
+
+.tableToolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
 }
 
-.uploading,
-.processing {
-  border-color: #8a6d1f;
-  color: #8a6d1f;
+.fileCell {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  min-width: 14rem;
 }
 
-.queued {
-  border-color: #1f5d8a;
-  color: #1f5d8a;
+.metaCell {
+  color: var(--muted);
+  white-space: nowrap;
 }
 
-.ready {
-  border-color: #1f7a3d;
-  color: #1f7a3d;
+.timeCell {
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.failed {
-  border-color: #a12a2a;
-  color: #a12a2a;
+.errorCode {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--danger-600);
 }

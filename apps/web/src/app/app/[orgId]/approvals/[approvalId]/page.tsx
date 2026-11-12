@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { fetchMe } from "@/lib/api/me";
 import { getApproval } from "@/lib/api/approvals";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import ui from "@/styles/ui.module.css";
 import { decideApprovalAction } from "./actions";
 import { DecisionControls } from "./DecisionControls";
+import styles from "./page.module.css";
 
 export const instant = false;
 
@@ -27,17 +30,17 @@ export default async function ApprovalDetailPage({
   const membership = me.organizations.find((org) => org.organizationId === orgId);
   if (!membership) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
   if (membership.role !== "ADMIN" && membership.role !== "OWNER") {
     return (
-      <div>
+      <div className={ui.pageNarrow}>
         <h1>Approval</h1>
-        <p>Only owners and admins can review proposed replies.</p>
+        <p className={ui.alertNotice}>Only owners and admins can review proposed replies.</p>
       </div>
     );
   }
@@ -46,58 +49,85 @@ export default async function ApprovalDetailPage({
   const pending = approval.status === "PENDING";
 
   return (
-    <div>
-      <p>
-        <Link href={`/app/${orgId}/approvals`}>← Back to approvals</Link>
-      </p>
+    <div className={styles.page}>
+      <Link className={ui.backLink} href={`/app/${orgId}/approvals`}>
+        ← Back to approvals
+      </Link>
 
-      <h1>Proposed {approval.actionType === "PUBLISH_INTERNAL_REPLY" ? "reply" : "action"}</h1>
+      <div className={ui.pageHeaderText}>
+        <h1>Proposed {approval.actionType === "PUBLISH_INTERNAL_REPLY" ? "reply" : "action"}</h1>
+        <div className={ui.actions}>
+          <StatusBadge value={approval.status} />
+          <span className={ui.badge}>{approval.actionType.replaceAll("_", " ")}</span>
+        </div>
+      </div>
 
-      <dl>
-        <dt>Status</dt>
-        <dd>{approval.status}</dd>
-        <dt>Ticket</dt>
-        <dd>
-          <Link href={`/app/${orgId}/tickets/${approval.ticketId}`}>{approval.ticketId}</Link>
-        </dd>
-        <dt>Agent run</dt>
-        <dd>{approval.runId}</dd>
-        <dt>Raised</dt>
-        <dd>{new Date(approval.createdAt).toLocaleString()}</dd>
-        {approval.decisionAt && (
-          <>
-            <dt>Decided</dt>
-            <dd>{new Date(approval.decisionAt).toLocaleString()}</dd>
-          </>
-        )}
-      </dl>
+      <section className={ui.card}>
+        <dl className={ui.metaList}>
+          <div className={ui.metaItem}>
+            <dt>Ticket</dt>
+            <dd>
+              <Link className={ui.mono} href={`/app/${orgId}/tickets/${approval.ticketId}`}>
+                {approval.ticketId}
+              </Link>
+            </dd>
+          </div>
+          <div className={ui.metaItem}>
+            <dt>Agent run</dt>
+            <dd className={ui.mono}>{approval.runId}</dd>
+          </div>
+          <div className={ui.metaItem}>
+            <dt>Raised</dt>
+            <dd>{new Date(approval.createdAt).toLocaleString()}</dd>
+          </div>
+          {approval.decisionAt && (
+            <div className={ui.metaItem}>
+              <dt>Decided</dt>
+              <dd>{new Date(approval.decisionAt).toLocaleString()}</dd>
+            </div>
+          )}
+        </dl>
+      </section>
 
-      <h2>Exact text to be published</h2>
-      {/* Plain text, deliberately. This came from a model reading untrusted input. */}
-      <blockquote style={{ whiteSpace: "pre-wrap" }}>
-        {approval.proposalBody ?? "(this proposal carries no text)"}
-      </blockquote>
-      <p>
-        This is the text that will be posted, character for character. It cannot be edited here —
-        approving publishes exactly what is shown above.
-      </p>
-
-      <h2>Evidence</h2>
-      {approval.evidence.length === 0 ? (
-        <p>
-          No sources were cited. Treat the draft with extra care: nothing above is backed by a
-          knowledge document.
+      <section className={ui.card}>
+        <div className={ui.sectionTitle}>
+          <h2 className={ui.cardTitle}>Exact text to be published</h2>
+        </div>
+        {/* Plain text, deliberately. This came from a model reading untrusted input. */}
+        <blockquote className={styles.proposal}>
+          {approval.proposalBody ?? "(this proposal carries no text)"}
+        </blockquote>
+        <p className={ui.hint}>
+          This is the text that will be posted, character for character. It cannot be edited here —
+          approving publishes exactly what is shown above.
         </p>
-      ) : (
-        <ul>
-          {approval.evidence.map((item) => (
-            <li key={`${item.documentId}-${item.chunkIndex}`}>
-              {item.title ?? "Untitled document"}
-              {item.chunkIndex !== undefined && ` (excerpt ${item.chunkIndex})`}
-            </li>
-          ))}
-        </ul>
-      )}
+      </section>
+
+      <section className={ui.card}>
+        <div className={ui.sectionTitle}>
+          <h2 className={ui.cardTitle}>Evidence</h2>
+          {approval.evidence.length > 0 && (
+            <span className={ui.badge}>{approval.evidence.length}</span>
+          )}
+        </div>
+        {approval.evidence.length === 0 ? (
+          <p role="note" className={ui.alertNotice}>
+            No sources were cited. Treat the draft with extra care: nothing above is backed by a
+            knowledge document.
+          </p>
+        ) : (
+          <ul className={styles.evidenceList}>
+            {approval.evidence.map((item) => (
+              <li key={`${item.documentId}-${item.chunkIndex}`} className={styles.evidenceItem}>
+                <span className={styles.evidenceTitle}>{item.title ?? "Untitled document"}</span>
+                {item.chunkIndex !== undefined && (
+                  <span className={ui.hint}>excerpt {item.chunkIndex}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {pending ? (
         <DecisionControls
@@ -105,13 +135,13 @@ export default async function ApprovalDetailPage({
           reject={decideApprovalAction.bind(null, orgId, approvalId, "REJECTED")}
         />
       ) : (
-        <>
-          <h2>Decision</h2>
+        <section className={ui.card}>
+          <h2 className={ui.cardTitle}>Decision</h2>
           {/* Terminal and immutable: there is no control here to change it. */}
-          <p role="status">
+          <p role="status" className={ui.alert}>
             This approval is <strong>{approval.status}</strong> and cannot be changed.
           </p>
-        </>
+        </section>
       )}
     </div>
   );

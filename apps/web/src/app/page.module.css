@@ -1,7 +1,18 @@
+/*
+ * The landing page is the only full-bleed brand surface in the app: deep
+ * petrol in both themes, so the first impression is the brand colour rather
+ * than a white page with a blue button on it.
+ */
+
 .page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  color: var(--on-brand);
+  background:
+    radial-gradient(75rem 40rem at 50% -8rem, rgb(47 140 160 / 35%), transparent 65%),
+    radial-gradient(40rem 30rem at 85% 110%, rgb(184 145 47 / 14%), transparent 70%),
+    var(--brand-900);
 }
 
 .hero {
@@ -10,51 +21,118 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
-  padding: 2rem 1.5rem;
+  gap: var(--space-5);
+  padding: var(--space-7) var(--space-5);
   text-align: center;
-  max-width: 640px;
+  max-width: 54rem;
   margin: 0 auto;
 }
 
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--on-brand);
+}
+
 .title {
-  font-size: clamp(1.75rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  max-width: 20ch;
+  /* A hairline gradient on the headline only — subtle enough to read as
+     material rather than as a gradient effect. */
+  background: linear-gradient(170deg, #ffffff 25%, var(--brand-300));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 .tagline {
-  color: var(--muted);
-  font-size: 1.05rem;
-  line-height: 1.5;
+  color: var(--on-brand-muted);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  max-width: 48ch;
 }
 
 .ctas {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
   justify-content: center;
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
+}
+
+.primary,
+.secondary {
+  padding: 0.6rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--text-base);
+  border: 1px solid transparent;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .primary {
-  background: var(--accent);
-  color: #fff;
-  padding: 0.65rem 1.25rem;
-  border-radius: 8px;
-  font-weight: 600;
+  background: var(--on-brand);
+  color: var(--brand-800);
 }
 
 .primary:hover {
-  opacity: 0.9;
+  text-decoration: none;
+  background: #ffffff;
+  transform: translateY(-1px);
 }
 
 .secondary {
-  border: 1px solid var(--border);
-  padding: 0.65rem 1.25rem;
-  border-radius: 8px;
-  color: var(--foreground);
+  color: var(--on-brand);
+  border-color: rgb(255 255 255 / 24%);
 }
 
 .secondary:hover {
-  background: var(--surface-hover);
+  text-decoration: none;
+  background: rgb(255 255 255 / 8%);
+  border-color: rgb(255 255 255 / 45%);
+}
+
+/* --- Points -------------------------------------------------------------- */
+
+.points {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  text-align: left;
+  width: 100%;
+}
+
+.point {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  backdrop-filter: blur(2px);
+}
+
+.pointTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--on-brand);
+}
+
+.pointBody {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--on-brand-muted);
 }

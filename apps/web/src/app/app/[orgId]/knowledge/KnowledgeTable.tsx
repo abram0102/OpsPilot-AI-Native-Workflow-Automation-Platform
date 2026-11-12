@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import type { KnowledgeDocument, KnowledgeDocumentStatus } from "@/lib/api/knowledge";
+import ui from "@/styles/ui.module.css";
 import styles from "./KnowledgeTable.module.css";
 
 interface KnowledgeTableProps {
@@ -11,12 +12,15 @@ interface KnowledgeTableProps {
   deleteAction: (documentId: string) => Promise<void>;
 }
 
+// Ingestion has its own vocabulary, so it keeps its own pill tones rather than
+// reusing StatusBadge's ticket/approval table — but the shared `ui.badge*`
+// classes mean the shapes and colours still match the rest of the app.
 const STATUS_CLASS: Record<KnowledgeDocumentStatus, string> = {
-  UPLOADING: styles.uploading,
-  QUEUED: styles.queued,
-  PROCESSING: styles.processing,
-  READY: styles.ready,
-  FAILED: styles.failed,
+  UPLOADING: ui.badgeWarning,
+  QUEUED: ui.badge,
+  PROCESSING: ui.badgeWarning,
+  READY: ui.badgeSuccess,
+  FAILED: ui.badgeDanger,
 };
 
 /**
@@ -28,19 +32,28 @@ export function KnowledgeTable({ documents, canDelete, deleteAction }: Knowledge
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
 
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => startRefresh(() => router.refresh())}
-        disabled={refreshing}
-      >
-        {refreshing ? "Refreshing…" : "Refresh status"}
-      </button>
-
-      {documents.length === 0 ? (
+  if (documents.length === 0) {
+    return (
+      <div className={ui.empty}>
         <p>No documents uploaded yet.</p>
-      ) : (
+      </div>
+    );
+  }
+
+  return (
+    <div className={ui.tableCard}>
+      <div className={styles.tableToolbar}>
+        <button
+          type="button"
+          className={ui.secondary}
+          onClick={() => startRefresh(() => router.refresh())}
+          disabled={refreshing}
+        >
+          {refreshing ? "Refreshing…" : "Refresh status"}
+        </button>
+      </div>
+
+      <div className={ui.tableScroll}>
         <table>
           <thead>
             <tr>
@@ -55,18 +68,18 @@ export function KnowledgeTable({ documents, canDelete, deleteAction }: Knowledge
           <tbody>
             {documents.map((document) => (
               <tr key={document.id}>
-                <td>{document.filename}</td>
-                <td>{document.mimeType}</td>
-                <td>{formatSize(document.sizeBytes)}</td>
+                <td className={styles.fileCell}>{document.filename}</td>
+                <td className={styles.metaCell}>{document.mimeType}</td>
+                <td className={styles.metaCell}>{formatSize(document.sizeBytes)}</td>
                 <td>
-                  <span className={`${styles.badge} ${STATUS_CLASS[document.status]}`}>
-                    {document.status}
-                  </span>
+                  <span className={STATUS_CLASS[document.status]}>{document.status}</span>
                   {document.status === "FAILED" && document.errorCode && (
-                    <span role="alert"> {document.errorCode}</span>
+                    <span role="alert" className={styles.errorCode}>
+                      {document.errorCode}
+                    </span>
                   )}
                 </td>
-                <td>{new Date(document.createdAt).toLocaleString()}</td>
+                <td className={styles.timeCell}>{new Date(document.createdAt).toLocaleString()}</td>
                 {canDelete && (
                   <td>
                     <DeleteDocumentForm
@@ -79,7 +92,7 @@ export function KnowledgeTable({ documents, canDelete, deleteAction }: Knowledge
             ))}
           </tbody>
         </table>
-      )}
+      </div>
     </div>
   );
 }
@@ -100,7 +113,9 @@ function DeleteDocumentForm({
         }
       }}
     >
-      <button type="submit">Delete</button>
+      <button type="submit" className={ui.danger}>
+        Delete
+      </button>
     </form>
   );
 }

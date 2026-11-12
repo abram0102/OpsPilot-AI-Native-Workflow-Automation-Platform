@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import ui from "@/styles/ui.module.css";
 import { createOrganizationAction, type CreateOrganizationState } from "./actions";
 
 const initialState: CreateOrganizationState = {};
@@ -10,31 +11,42 @@ export function CreateOrganizationForm() {
   const [state, formAction, pending] = useActionState(createOrganizationAction, initialState);
 
   return (
-    <form action={formAction}>
-      <div>
-        <label htmlFor="org-name">Organization name</label>
-        <br />
-        <input id="org-name" name="name" required maxLength={200} />
+    <form action={formAction} className={ui.card}>
+      <h2 className={ui.cardTitle}>Create an organization</h2>
+
+      <div className={ui.formGrid}>
+        <div className={ui.field}>
+          <label htmlFor="org-name">Organization name</label>
+          <input id="org-name" name="name" required maxLength={200} />
+        </div>
+
+        <div className={ui.field}>
+          <label htmlFor="org-slug">URL slug</label>
+          <input
+            id="org-slug"
+            name="slug"
+            required
+            maxLength={63}
+            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            aria-describedby="org-slug-hint"
+          />
+          <p id="org-slug-hint" className={ui.hint}>
+            Lowercase letters, numbers and hyphens only — this becomes part of the org&apos;s URL.
+          </p>
+        </div>
       </div>
-      <div>
-        <label htmlFor="org-slug">URL slug</label>
-        <br />
-        <input
-          id="org-slug"
-          name="slug"
-          required
-          maxLength={63}
-          pattern="[a-z0-9]+(-[a-z0-9]+)*"
-          aria-describedby="org-slug-hint"
-        />
-        <p id="org-slug-hint">
-          Lowercase letters, numbers and hyphens only — this becomes part of the org&apos;s URL.
+
+      {state.error && (
+        <p role="alert" className={ui.alertError}>
+          {state.error}
         </p>
+      )}
+
+      <div className={ui.actions}>
+        <button type="submit" disabled={pending}>
+          {pending ? "Creating…" : "Create organization"}
+        </button>
       </div>
-      {state.error && <p role="alert">{state.error}</p>}
-      <button type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create organization"}
-      </button>
     </form>
   );
 }

@@ -1,0 +1,17 @@
+/*
+ * The decision panel is the only place in the app where a click publishes text
+ * to someone outside the organization, so it is visually separated from the
+ * evidence above it rather than reading as one more card in the stack.
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--brand-300);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+  /* A quiet brand wash so the panel reads as the end of the page's argument. */
+  background-image: linear-gradient(var(--brand-50), transparent 60%);
+}

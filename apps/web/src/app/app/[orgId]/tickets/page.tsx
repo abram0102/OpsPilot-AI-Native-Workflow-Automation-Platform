@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { fetchMe } from "@/lib/api/me";
 import { listTickets, type TicketPriority, type TicketStatus } from "@/lib/api/tickets";
+import { FilterForm } from "@/components/ui/FilterForm";
+import ui from "@/styles/ui.module.css";
 import { createTicketAction } from "./actions";
 import { CreateTicketDialog } from "./CreateTicketDialog";
 import { TicketTable } from "./TicketTable";
@@ -30,9 +32,9 @@ export default async function TicketsPage({
   const membership = me.organizations.find((org) => org.organizationId === orgId);
   if (!membership) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
@@ -49,45 +51,53 @@ export default async function TicketsPage({
   });
 
   return (
-    <div>
-      <h1>Tickets</h1>
+    <div className={ui.page}>
+      <div className={ui.pageHeader}>
+        <div className={ui.pageHeaderText}>
+          <h1>Tickets</h1>
+          <p className={ui.lead}>
+            Support conversations in this organization, newest activity first.
+          </p>
+        </div>
+        {canCreate && <CreateTicketDialog action={createTicketAction.bind(null, orgId)} />}
+      </div>
 
-      <form method="get">
-        <label htmlFor="filter-status">Status</label>
-        <br />
-        <select id="filter-status" name="status" defaultValue={statusFilter ?? ""}>
-          <option value="">All</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <br />
-        <label htmlFor="filter-priority">Priority</label>
-        <br />
-        <select id="filter-priority" name="priority" defaultValue={priorityFilter ?? ""}>
-          <option value="">All</option>
-          {PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <br />
-        <button type="submit">Apply filters</button>
-      </form>
+      <FilterForm label="Filter tickets">
+        <div className={ui.fieldInline}>
+          <label htmlFor="filter-status">Status</label>
+          <select id="filter-status" name="status" defaultValue={statusFilter ?? ""}>
+            <option value="">All</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {canCreate && <CreateTicketDialog action={createTicketAction.bind(null, orgId)} />}
+        <div className={ui.fieldInline}>
+          <label htmlFor="filter-priority">Priority</label>
+          <select id="filter-priority" name="priority" defaultValue={priorityFilter ?? ""}>
+            <option value="">All</option>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FilterForm>
 
       <TicketTable orgId={orgId} tickets={page.items} />
 
       {page.nextCursor && (
-        <Link
-          href={`/app/${orgId}/tickets?${buildQuery({ status: statusFilter, priority: priorityFilter, cursor: page.nextCursor })}`}
-        >
-          Next page
-        </Link>
+        <div className={ui.actionsEnd}>
+          <Link
+            href={`/app/${orgId}/tickets?${buildQuery({ status: statusFilter, priority: priorityFilter, cursor: page.nextCursor })}`}
+          >
+            Next page →
+          </Link>
+        </div>
       )}
     </div>
   );

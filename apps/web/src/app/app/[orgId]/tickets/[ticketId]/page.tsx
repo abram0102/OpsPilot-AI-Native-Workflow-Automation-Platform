@@ -1,9 +1,13 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { fetchMe } from "@/lib/api/me";
 import { getTicket, listTicketMessages } from "@/lib/api/tickets";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import ui from "@/styles/ui.module.css";
 import { updateTicketAction, createMessageAction } from "./actions";
 import { UpdateTicketForm } from "./UpdateTicketForm";
 import { PostMessageForm } from "./PostMessageForm";
+import styles from "./page.module.css";
 
 export const instant = false;
 
@@ -25,9 +29,9 @@ export default async function TicketDetailPage({
   const membership = me.organizations.find((org) => org.organizationId === orgId);
   if (!membership) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <main id="main-content" tabIndex={-1} className={ui.pageNarrow}>
         <h1>No access</h1>
-        <p>You are not a member of this organization.</p>
+        <p className={ui.lead}>You are not a member of this organization.</p>
       </main>
     );
   }
@@ -39,49 +43,93 @@ export default async function TicketDetailPage({
   ]);
 
   return (
-    <div>
-      <h1>{ticket.subject}</h1>
-      <p>{ticket.description}</p>
-      {ticket.tags.length > 0 && (
-        <ul>
+    <div className={ui.page}>
+      <Link className={ui.backLink} href={`/app/${orgId}/tickets`}>
+        ← Back to tickets
+      </Link>
+
+      <div className={ui.pageHeaderText}>
+        <h1>{ticket.subject}</h1>
+        <div className={ui.actions}>
+          <StatusBadge value={ticket.status} />
+          <StatusBadge value={ticket.priority} />
           {ticket.tags.map((tag) => (
-            <li key={tag}>{tag}</li>
+            <span key={tag} className={ui.badge}>
+              {tag}
+            </span>
           ))}
-        </ul>
-      )}
+        </div>
+      </div>
 
-      {canManage ? (
-        <UpdateTicketForm
-          action={updateTicketAction.bind(null, orgId, ticketId)}
-          version={ticket.version}
-          status={ticket.status}
-          priority={ticket.priority}
-        />
-      ) : (
-        <p>
-          Status: {ticket.status} · Priority: {ticket.priority}
-        </p>
-      )}
+      <div className={styles.columns}>
+        <div className={styles.main}>
+          <section className={ui.card}>
+            <h2 className={ui.cardTitle}>Original request</h2>
+            <p className={styles.description}>{ticket.description}</p>
+          </section>
 
-      <h2>Conversation</h2>
-      {messages.length === 0 ? (
-        <p>No messages yet.</p>
-      ) : (
-        <ul>
-          {messages.map((message) => (
-            <li key={message.id}>
-              <strong>{message.authorType === "AGENT" ? "Agent" : "User"}:</strong> {message.body}
-            </li>
-          ))}
-        </ul>
-      )}
+          <section className={ui.card}>
+            <h2 className={ui.cardTitle}>Conversation</h2>
+            {messages.length === 0 ? (
+              <p className={ui.lead}>No messages yet.</p>
+            ) : (
+              <ul className={styles.thread}>
+                {messages.map((message) => {
+                  const fromAgent = message.authorType === "AGENT";
+                  return (
+                    <li
+                      key={message.id}
+                      className={fromAgent ? styles.messageAgent : styles.message}
+                    >
+                      <span className={styles.author}>{fromAgent ? "Agent" : "User"}</span>
+                      <p className={styles.body}>{message.body}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
 
-      {canManage &&
-        (REPLYABLE_STATUSES.has(ticket.status) ? (
-          <PostMessageForm action={createMessageAction.bind(null, orgId, ticketId)} />
-        ) : (
-          <p>This ticket is {ticket.status} and cannot be replied to.</p>
-        ))}
+            {canManage &&
+              (REPLYABLE_STATUSES.has(ticket.status) ? (
+                <PostMessageForm action={createMessageAction.bind(null, orgId, ticketId)} />
+              ) : (
+                <p className={ui.alertNotice}>
+                  This ticket is {ticket.status} and cannot be replied to.
+                </p>
+              ))}
+          </section>
+        </div>
+
+        <aside className={styles.side}>
+          {canManage ? (
+            <UpdateTicketForm
+              action={updateTicketAction.bind(null, orgId, ticketId)}
+              version={ticket.version}
+              status={ticket.status}
+              priority={ticket.priority}
+            />
+          ) : (
+            <div className={ui.card}>
+              <h2 className={ui.cardTitle}>Properties</h2>
+              <dl className={ui.metaList}>
+                <div className={ui.metaItem}>
+                  <dt>Status</dt>
+                  <dd>
+                    <StatusBadge value={ticket.status} />
+                  </dd>
+                </div>
+                <div className={ui.metaItem}>
+                  <dt>Priority</dt>
+                  <dd>
+                    <StatusBadge value={ticket.priority} />
+                  </dd>
+                </div>
+              </dl>
+              <p className={ui.hint}>Viewers cannot change a ticket.</p>
+            </div>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

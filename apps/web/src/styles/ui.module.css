@@ -1,0 +1,403 @@
+/*
+ * Shared layout primitives.
+ *
+ * globals.css styles the ELEMENTS (what a heading, input, table cell or
+ * blockquote looks like). This file holds the COMPOSITIONS that more than one
+ * page needs: the page header, cards, toolbars, badges, stat tiles, empty
+ * states. Anything used by exactly one page stays in that page's own
+ * co-located `*.module.css` instead.
+ *
+ * Imported as `import ui from "@/styles/ui.module.css"`. CSS Modules scope
+ * these names per build, so there is no global class namespace to collide
+ * with — and `composes` lets a page-level module extend one of these rather
+ * than copy it.
+ */
+
+/* --- Page scaffolding --------------------------------------------------- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 76rem;
+}
+
+/* A narrower column for pages that are mostly prose or a single form, where a
+   full-width measure would hurt readability. */
+.pageNarrow {
+  composes: page;
+  max-width: 44rem;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.pageHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.lead {
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: var(--link);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* --- Card --------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Same container, but for a table that should sit flush against the edges. */
+.tableCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.cardTitle {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+/* --- Toolbar (filters, inline actions) ---------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbarSpacer {
+  margin-left: auto;
+}
+
+/* --- Fields -------------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* globals.css caps a bare control at 28rem so a stray input on a wide page
+   doesn't stretch to an unusable measure. Inside a field the container already
+   sets the measure — a card, a narrow column — so the control fills it. */
+.field > input,
+.field > textarea,
+.field > select {
+  width: 100%;
+  max-width: none;
+}
+
+/* Compact variant for a filter bar, where the control should not stretch. */
+.fieldInline {
+  composes: field;
+  min-width: 9rem;
+  flex: 0 1 auto;
+}
+
+.fieldInline select,
+.fieldInline input {
+  max-width: none;
+}
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.actionsEnd {
+  composes: actions;
+  justify-content: flex-end;
+}
+
+/* Every <button> is filled brand by default (globals.css). `.secondary` is the
+   quiet variant for cancels, toggles and re-runs — the actions that must not
+   compete with the one that commits. */
+.secondary {
+  color: var(--foreground);
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--brand-400);
+}
+
+.secondary:active:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+/* Destructive or rejecting actions. Still a plain outline rather than a solid
+   red fill: rejecting a draft is routine review work, not a catastrophe, and a
+   wall of red would push reviewers toward approving by default. */
+.danger {
+  composes: secondary;
+  color: var(--danger-600);
+  border-color: color-mix(in srgb, var(--danger-600) 45%, transparent);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--danger-50);
+  border-color: var(--danger-600);
+}
+
+/* --- Badges -------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badgeInfo {
+  composes: badge;
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+  color: var(--brand-ink);
+}
+
+.badgeSuccess {
+  composes: badge;
+  border-color: color-mix(in srgb, var(--success-600) 40%, transparent);
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.badgeWarning {
+  composes: badge;
+  border-color: color-mix(in srgb, var(--warning-600) 40%, transparent);
+  background: var(--warning-50);
+  color: var(--warning-600);
+}
+
+.badgeDanger {
+  composes: badge;
+  border-color: color-mix(in srgb, var(--danger-600) 40%, transparent);
+  background: var(--danger-50);
+  color: var(--danger-600);
+}
+
+.badgeAccent {
+  composes: badge;
+  border-color: color-mix(in srgb, var(--accent-500) 45%, transparent);
+  background: var(--accent-50);
+  color: var(--accent-600);
+}
+
+/* --- Stat tiles ----------------------------------------------------------- */
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-4);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+}
+
+/* A tile whose whole surface is clickable. The anchor stays inside the <dt>
+   so the <dl> markup remains valid (a <dl> may only contain <dt>/<dd> and
+   wrapper <div>s) and the link text stays the accessible name; `.stretchLink`
+   then expands its hit area over the tile. */
+.statTile {
+  composes: stat;
+  position: relative;
+}
+
+.statTile:has(a:hover),
+.statTile:has(a:focus-visible) {
+  border-color: var(--brand-400);
+  box-shadow: var(--shadow-md);
+}
+
+.stretchLink {
+  color: inherit;
+}
+
+.stretchLink:hover {
+  text-decoration: none;
+}
+
+.stretchLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.statLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.statValue {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+/* --- States --------------------------------------------------------------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-7) var(--space-5);
+}
+
+.alert {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  padding: var(--space-3) var(--space-4);
+}
+
+.alertError {
+  composes: alert;
+  border-color: color-mix(in srgb, var(--danger-600) 45%, transparent);
+  background: var(--danger-50);
+  color: var(--danger-600);
+}
+
+.alertSuccess {
+  composes: alert;
+  border-color: color-mix(in srgb, var(--success-600) 45%, transparent);
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.alertNotice {
+  composes: alert;
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+  color: var(--brand-ink);
+}
+
+/* --- Metadata list --------------------------------------------------------- */
+
+/* A <dl> laid out as label-over-value columns. */
+.metaList {
+  display: grid;
+  /* 13rem so a UUID fits on one line at the monospace size used for ids. */
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.metaItem dd {
+  overflow-wrap: anywhere;
+}
+
+/* Identifiers (run ids, ticket ids) read better monospaced and are often
+   copy-pasted into a query. */
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}

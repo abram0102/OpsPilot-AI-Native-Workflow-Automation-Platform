@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import ui from "@/styles/ui.module.css";
+import styles from "./status.module.css";
 
 /**
  * Root error boundary. Next.js requires this to be a Client Component.
@@ -19,24 +21,12 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <div role="alert" style={{ padding: "3rem 1.5rem", textAlign: "center" }}>
+    <div role="alert" className={styles.centered}>
       <h1>Something went wrong</h1>
-      <p style={{ color: "var(--muted)", marginTop: "0.5rem" }}>
+      <p className={ui.lead}>
         An unexpected error occurred. You can try again, or reload the page.
       </p>
-      <button
-        type="button"
-        onClick={reset}
-        style={{
-          marginTop: "1.5rem",
-          padding: "0.6rem 1.25rem",
-          borderRadius: "8px",
-          border: "1px solid var(--border)",
-          background: "var(--surface)",
-          color: "var(--foreground)",
-          cursor: "pointer",
-        }}
-      >
+      <button type="button" className={ui.secondary} onClick={reset}>
         Try again
       </button>
     </div>

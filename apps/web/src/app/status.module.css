@@ -1,0 +1,35 @@
+/*
+ * Shared by the root loading and error states — both are a short, centred
+ * message on an otherwise empty page, and both can render before (or instead
+ * of) the AppShell, so neither can rely on the shell's padding.
+ */
+.centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  padding: var(--space-7) var(--space-5);
+  min-height: 60vh;
+}
+
+/* A quiet pulse rather than a spinner: it says "working" without implying a
+   known duration, and it stops entirely under prefers-reduced-motion (see
+   globals.css). */
+.pulse {
+  color: var(--muted);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
