@@ -25,6 +25,11 @@ from opspilot_agent.clients.internal_actions import (
 from opspilot_agent.clients.service_token import mint_service_token
 from opspilot_agent.config import Settings
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# the worker's service identity and token signing.
+pytestmark = pytest.mark.security
+
+
 SECRET = "a-local-test-secret-long-enough-for-hs256"
 AUDIENCE = "https://internal.opspilot.local"
 

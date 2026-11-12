@@ -9,6 +9,7 @@ import com.opspilot.auth.UserRepository;
 import com.opspilot.organization.Organization;
 import com.opspilot.organization.OrganizationRepository;
 import java.util.UUID;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @Transactional
+@Tag("security")
 class TicketRepositoryIntegrationTest {
 
   @Autowired private UserRepository users;

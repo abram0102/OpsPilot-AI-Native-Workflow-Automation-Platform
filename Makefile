@@ -15,7 +15,8 @@ SHELL := /bin/bash
 
 .PHONY: help infra-up infra-down infra-logs infra-reset \
 	api-dev agent-dev web-dev \
-	lint test-unit test-integration test-contract test-e2e test-security \
+	lint test-unit test-integration test-contract test-e2e \
+	test-security test-security-external audit-deps \
 	eval-mock eval-real check seed-demo generate-contracts
 
 # Best-effort: switch to the Node version pinned in apps/web/.nvmrc if nvm is
@@ -133,9 +134,41 @@ test-e2e: ## Run Playwright E2E against the local stack — T09+
 	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T09 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
 	@exit 1
 
-test-security: ## Run the security/tenant-isolation regression suite — T28
-	@printf '\033[31m✗ %s is not implemented yet\033[0m (ticket T28 in docs/TASKS.md). See docs/PROGRESS.md for status.\n' "$@" >&2
-	@exit 1
+# The suite is selected by tag/marker, not by a list of file names: a list is a thing that falls
+# out of date silently, and a security suite that quietly stopped covering an endpoint is worse
+# than no suite. Java classes carry @Tag("security"); Python modules carry
+# `pytestmark = pytest.mark.security`; the web side has no tag mechanism, so its two
+# boundary tests are named explicitly.
+test-security: _ensure-docker ## Run the security/tenant-isolation regression suite — T28
+	cd services/api && ./mvnw -q test -Dgroups=security
+	cd services/agent && uv run pytest -m security --strict-markers
+	cd apps/web && $(NVM_USE) pnpm vitest run \
+		src/app/api/run-status/route.test.ts \
+		src/lib/api/knowledge-rules.test.ts
+
+test-security-external: ## Same suite, against servers you are already running (no Docker) — T28
+	# Gate H0 escape hatch, same as test-integration-external. Point POSTGRES_* at a PostgreSQL
+	# with pgvector and REDIS_* at a Redis. Use a database of its own: these tests migrate and
+	# truncate, so pointing them at the database `make api-dev` is using will disturb it.
+	cd services/api && ./mvnw -q test -Dgroups=security \
+		-Dopspilot.test.external-postgres=true -Dopspilot.test.external-redis=true
+	cd services/agent && uv run pytest -m security --strict-markers
+	cd apps/web && $(NVM_USE) pnpm vitest run \
+		src/app/api/run-status/route.test.ts \
+		src/lib/api/knowledge-rules.test.ts
+
+# docs/SECURITY_AND_TESTING.md §8.5: "dependency advisory check with actionable report".
+# OSV-Scanner reads this repo's three lockfiles directly (pom.xml, uv.lock, pnpm-lock.yaml) and
+# needs no API key or registry account, which is why it is here rather than three ecosystem-native
+# audit commands with three different output formats and three different failure conventions.
+# Dependabot (.github/dependabot.yml) opens the update PRs; this is the gate that fails a build.
+audit-deps: ## Scan the committed lockfiles for known vulnerabilities (OSV) — T28
+	@command -v osv-scanner >/dev/null 2>&1 || { \
+		echo "✗ osv-scanner is not installed. brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/" >&2; \
+		echo "  CI runs this via google/osv-scanner-action, so a missing local binary blocks nothing but this target." >&2; \
+		exit 1; \
+	}
+	osv-scanner scan source --recursive .
 
 eval-mock: ## Run the offline smoke evaluation (no API key, no cost) — T20; scored dataset is T30
 	cd services/agent && uv run python -m opspilot_agent.evals

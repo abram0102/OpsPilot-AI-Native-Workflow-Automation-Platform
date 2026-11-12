@@ -134,7 +134,7 @@ The agent never gets a generic arbitrary-function executor. Structured outputs a
 
 ## HTTP error cases to implement
 
-- 400 `VALIDATION_ERROR` malformed payload
+- 400 `VALIDATION_ERROR` malformed payload (includes a missing required query parameter)
 - 401 `UNAUTHENTICATED` missing/invalid OIDC token
 - 403 `FORBIDDEN` tenant/role mismatch (or 404 for concealment, consistently)
 - 404 `NOT_FOUND` unknown resource in authorized scope
@@ -143,6 +143,14 @@ The agent never gets a generic arbitrary-function executor. Structured outputs a
 - 413 `FILE_TOO_LARGE`
 - 429 `RATE_LIMITED` with retry guidance
 - 503 `DEPENDENCY_UNAVAILABLE` for critical service unavailability
+
+Added at T28, after the endpoint sweep found these answering 500 (docs/DECISIONS.md ADR-053). A
+client mistake must not read as a server failure: it tells the caller to retry something that
+cannot work, and it raises the 5xx rate that docs/SECURITY_AND_TESTING.md §7 alerts on, so a
+scanner probing the API looks exactly like an outage.
+
+- 405 `METHOD_NOT_ALLOWED` wrong verb for an existing path
+- 415 `UNSUPPORTED_MEDIA_TYPE` body sent as a type the endpoint does not read
 
 ## Contract governance
 

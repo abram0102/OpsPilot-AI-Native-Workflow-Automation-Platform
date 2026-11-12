@@ -14,6 +14,10 @@ from opspilot_agent.knowledge.extraction import (
     extract_text,
 )
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# upload content guards (type, expansion, encryption).
+pytestmark = pytest.mark.security
+
 
 def make_pdf(pages: int = 1, text: str = "Hello from a PDF.") -> bytes:
     writer = PdfWriter()

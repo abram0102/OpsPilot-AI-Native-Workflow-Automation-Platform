@@ -11,6 +11,34 @@ Baseline targets:
 
 Version changes should be made as explicit dependency update tickets and accompanied by smoke tests.
 
+## T28 notes — 2026-11-12
+
+- **No new runtime dependency.** T28 adds tests, a Makefile target and a CI job; nothing was added
+  to any manifest.
+- **`osv-scanner` 2.7.1** (`brew install osv-scanner`) as the dependency-advisory scanner, with the
+  matching `google/osv-scanner-action/osv-scanner-action@v2.7.1`
+  (`32d3cd482bdadfb38b186c0ad1b031902d55d932`) in CI — same scanner version in both places, so a
+  local `make audit-deps` and the CI job cannot disagree about what counts as a finding. Chosen over
+  three ecosystem-native audits (`mvn dependency-check`, `pip-audit`, `pnpm audit`) because it reads
+  all three of this repo's lockfiles in one pass and needs no API key, registry account or NVD
+  throttling; OWASP dependency-check in particular wants an NVD key and minutes of database
+  download, which is a poor fit for a per-PR gate. It is a developer tool, not a dependency: a
+  missing local binary fails only `make audit-deps`, with the install command in the message.
+- **`minimatch` overridden to `^11.0.1`** in `apps/web/pnpm-workspace.yaml` (pnpm 12 reads
+  `overrides` from the workspace file, not from `package.json`'s `pnpm` key — the latter is silently
+  ignored with a warning).
+
+  The first scan found **GHSA-g3hv-75wg-m249** (CVSS 6.9): minimatch 7.0.0–11.0.0 amplifies
+  attacker-controlled glob patterns in `firstPhasePreProcess()`. It reaches this repo only as a
+  transitive **devDependency** of `eslint-config-next`
+  (`@typescript-eslint/typescript-estree` pins `^10.2.2`), so it is never in the shipped bundle and
+  the "attacker-controlled pattern" would have to be a lint glob. Overridden rather than ignored
+  anyway, because an ignore file is a thing nobody revisits and the fixed release turned out to be a
+  drop-in: `pnpm lint`, `pnpm typecheck`, `pnpm test` (54) and `pnpm build` all pass on 11.x, and the
+  scan reports no issues afterwards. The override crosses a major boundary from what
+  typescript-estree declares, which is the reason it is recorded here — remove it once that package's
+  own range reaches `^11`.
+
 ## T00 notes
 
 No ecosystem dependencies were installed in T00 (no Java/Node/Python project manifests exist yet). Nothing to record here beyond the baseline targets above. T02 (Spring Boot), T03 (Python worker) and T04 (Next.js) will each record their actual selected versions, lockfile paths and installation dates when those projects are initialized.

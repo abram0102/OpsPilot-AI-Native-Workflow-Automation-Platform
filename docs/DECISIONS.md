@@ -586,3 +586,86 @@ Status: **Accepted**, 2026-11-11.
 **The enums come from the generated contract.** `AgentRunStatus` and `AgentStepType` were written out by hand first and were wrong: `SUCCEEDED`, `PLAN`, `DRAFT`, `TOOL_CALL` never existed, against a real vocabulary of `COMPLETED`/`RETRY_SCHEDULED` and `CLASSIFY`/`DRAFT_REPLY`/`PROPOSE_TOOL`/`EXECUTE_TOOL`. `tsc` caught it only because the generated `paths` type disagreed. They are now derived from `components["schemas"]` so the next server-side addition is a type error rather than a status the UI silently renders as neutral.
 
 **Found by running it, again.** `make worker-dev` could not start: `.env.example` ships `LLM_INPUT_COST_PER_MTOK=` with no value, `make worker-dev` sources that file, and pydantic receives the empty *string* — not an absent value — which `Decimal | None` rejects. The worker died before reading a single event. "Set to nothing" and "not set" mean the same thing for a price, so both now mean no rate (`OptionalDecimal`), with a test that fails against the old annotation. That makes two targets in this project (`make seed-demo` in the design pass, `make worker-dev` here) that no test covered because no test runs a Makefile target the way an operator does.
+
+## ADR-053 — T28: the security suite discovers its own targets, and the threat model is checked by a script
+
+**Context.** By the time T28 came round, almost every case in `docs/SECURITY_AND_TESTING.md` §3 was
+already covered — 235 Java and 308 Python tests, including cross-tenant concealment on every
+resource, the full role matrix, approval forgery, duplicate execution under real concurrency,
+injected document text, and upload MIME/magic-byte spoofing. T28 was therefore not "write the
+security tests". It was: find what the named tests structurally cannot cover, make the set runnable
+as a suite, and prove the net catches a regression.
+
+**The gap was shape, not quantity.** Every existing test names the endpoint it attacks. That means
+the suite can only ever prove something about an endpoint somebody remembered to write a test for —
+and the realistic failure in this codebase is not "the ticket check was wrong", it is "T31 adds an
+endpoint and forgets the check entirely". No amount of named tests catches that.
+
+**Decision 1 — the sweep asks Spring for the targets.**
+`SecurityRegressionSweepIntegrationTest` reads `RequestMappingHandlerMapping` and attacks every
+mapping it finds: no credential must give 401 everywhere, and a validly authenticated stranger must
+be refused on every `{orgId}` route. A new endpoint is in the test the moment it is mapped.
+
+Two details are deliberate. **GET is held to a stricter standard than a write**: a generic sweep
+cannot invent a valid body, so a write gets `{}` and can legitimately be deflected by bean
+validation at 400 before authorization is consulted — that is still a refusal and still no leak, so
+writes must be 4xx and must never be 2xx or 5xx. A GET has no body to be deflected by, so it must
+be refused by the authorization check itself: 403 or 404, nothing else. And **the sweep asserts its
+own population** (more than 20 routes, more than 10 scoped ones), because a discovery bug that found
+nothing would otherwise pass while proving the opposite of what it claims. A companion test checks a
+real member still gets 200, so "all blocked" cannot be satisfied by refusing everyone.
+
+**Decision 2 — the suite is selected by tag, never by a file list.** Java classes carry
+`@Tag("security")`, Python modules `pytestmark = pytest.mark.security`, and `make test-security`
+selects on those. A list of file names is a thing that goes out of date silently, and a security
+suite that quietly stopped covering an endpoint is worse than no suite. CI runs the selection as its
+own named step in both the Java and Python jobs, so the state is readable without opening a log and
+a selection that matched nothing fails the build. The web side has no tag mechanism, so its two
+boundary tests are named explicitly — the one place a list was unavoidable.
+
+**Decision 3 — the threat model's test column is machine-checked.** `docs/THREAT_MODEL.md` maps each
+threat to `path::test name`, and `scripts/check-threat-model.py` fails CI if a referenced file or
+test name no longer exists. A threat model pointing at renamed tests reads as coverage and is not,
+which is worse than an empty column; now renaming a security test breaks the build and the author
+has to update the row. The document also states its gaps as rows (**none**, with why) rather than
+leaving them to be inferred from absence.
+
+**Decision 4 — OSV-Scanner, not three ecosystem audits.** One scanner reads all three lockfiles
+(`pom.xml`, `uv.lock`, `pnpm-lock.yaml`) in a single pass with no API key, registry account or NVD
+throttling. The alternative was three native audit commands with three output formats and three
+failure conventions. Dependabot already opened update PRs; what was missing was a gate that fails
+one, which is now the `Dependency advisories (OSV)` job and `make audit-deps`.
+
+**What the drill found.** The acceptance criterion "tests catch deliberate unsafe code path in
+review" was run, not assumed. Removing the membership check from `listDocuments` was caught by the
+sweep, which named the route (`GET …/knowledge/documents` answering `200` to a stranger) — and it
+failed on the *missing check*, not on whether that fixture happened to hold rows, which is the right
+sensitivity. Dropping `organizationId` from the run list's two keyset queries was caught by exactly
+**one** test, the ticket-filter one added in T27: every other list test seeds a single tenant, and
+the membership check (a separate mechanism) kept the sweep's stranger out, so the plain list — the
+call the UI makes on every page load — had no direct cross-tenant assertion at all. A second test
+now covers it, and the drill was re-run to confirm both fail.
+
+**What the sweep found on its first run.** `PUT …/knowledge/uploads/local-object` answered **500
+`INTERNAL_ERROR`** when its required `objectKey` query parameter was absent;
+`MissingServletRequestParameterException` reached the catch-all `@ExceptionHandler(Exception.class)`.
+Probing further showed the wrong HTTP verb and an unsupported content type did the same. A client
+mistake dressed as a server failure is wrong twice over: the caller is told to retry something that
+cannot work, and the 5xx rate that `docs/SECURITY_AND_TESTING.md` §7 alerts on rises every time
+anyone probes the API — so a scanner looks exactly like an outage. Three handlers were added (400
+`VALIDATION_ERROR`, 405 `METHOD_NOT_ALLOWED`, 415 `UNSUPPORTED_MEDIA_TYPE`); the last two are codes
+`docs/API_CONTRACT.md` did not list, and it has been extended rather than the statuses bent to fit.
+
+**Rejected: a separate `security` source set or Maven profile.** The tagged tests also belong to the
+ordinary suite — running them twice in CI is seconds, and a security test that only runs under a
+special command is a security test that stops running.
+
+**Addendum — a flake the single-class run could not have found.** `SecretHygieneIntegrationTest`
+first used logback's own `ListAppender`, which keeps a plain `ArrayList`. The threads that log
+during a request are not only the test's: Hikari, the Redis client and Spring's background threads
+all write to the root logger, so streaming that list while another thread appended threw
+`ConcurrentModificationException` — on a *full suite* run, after the class had passed twice on its
+own. It is now a concurrent queue that flattens each event to a string at append time, because
+logback reuses and mutates event objects and holding references to read later is a second race on
+top of the first. Worth recording for the general point: a test that captures logs is a test with
+other people's threads in it, and running one class is not the same experiment as running the suite.

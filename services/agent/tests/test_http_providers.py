@@ -18,6 +18,11 @@ from opspilot_agent.providers.http import HttpEmbeddingProvider, HttpLLMProvider
 from opspilot_agent.providers.resilience import CircuitBreaker, RetryPolicy
 from opspilot_agent.providers.schemas import Classification, TicketCategory
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# provider error bodies echoing credentials, malformed model output.
+pytestmark = pytest.mark.security
+
+
 API_KEY = SecretStr("sk-test-only-not-a-real-key")
 
 VALID_CLASSIFICATION = {

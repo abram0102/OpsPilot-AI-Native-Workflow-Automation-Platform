@@ -16,6 +16,10 @@ from opspilot_agent.providers.resilience import CircuitBreaker, RetryPolicy
 from opspilot_agent.providers.schemas import Classification, ReplyDraft
 from opspilot_agent.providers.tokens import enforce_input_budget, estimate_tokens
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# secret redaction, output-schema validation, budgets.
+pytestmark = pytest.mark.security
+
 
 class TestSchemas:
     def test_rejects_a_confidence_outside_the_documented_range(self) -> None:

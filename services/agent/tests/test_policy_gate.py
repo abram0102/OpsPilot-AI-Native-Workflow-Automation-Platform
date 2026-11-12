@@ -17,6 +17,10 @@ from opspilot_agent.graphs.policy import (
 )
 from opspilot_agent.providers.schemas import AgentActionType, ToolProposal
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# the server-side action policy: allowlist, approval requirement, per-run caps.
+pytestmark = pytest.mark.security
+
 
 def tag_proposal(tag: str, tool_call_id: str = "call-1", **arguments: str) -> ToolProposal:
     return ToolProposal(

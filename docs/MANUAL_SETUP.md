@@ -46,6 +46,31 @@ Most coding work can be automated. These steps require personal account control,
 2. Store as local env and managed production secret. Confirm data policies are appropriate for synthetic demo text.
 3. CI uses `AI_MODE=mock` and MUST NOT need an LLM key. Real-LLM eval runs only with explicit permission and budget limit.
 
+## Gate H2b — GitHub repository security settings (optional, no cost; added at T28)
+
+Everything T28 built runs as a **failing check on a pull request**, which needs no repository
+setting at all: the OSV dependency scan, the gitleaks secret scan, and the tagged security suites
+are ordinary CI jobs. These steps only add visibility and enforcement that CI cannot grant itself,
+and all of them are free on a private repository.
+
+1. **Dependabot alerts** — Settings → Code security → enable *Dependabot alerts* and *Dependabot
+   security updates*. `.github/dependabot.yml` already schedules weekly version updates; alerts are
+   the separate switch that reports a newly published advisory against a dependency you are already
+   on, without waiting for the weekly run. There is nothing Codex can do from the repository tree to
+   turn these on.
+2. **Code scanning alerts (optional)** — the OSV job deliberately does not upload SARIF: that needs
+   `security-events: write`, and `.github/workflows/ci.yml` is read-only by design (least
+   privilege). The failed check is the gate. If you want findings listed in the Security tab as
+   well, grant that one job `security-events: write` and add the scanner's SARIF upload — a
+   deliberate widening of a workflow's permissions, so it is your call, not Codex's.
+3. **Protected `main`** — Settings → Branches → require the CI checks to pass before merging, and
+   require a pull request. `docs/SECURITY_AND_TESTING.md` §1 lists "protected main branch" as a
+   supply-chain mitigation, and it is the only item on that list that cannot be expressed in the
+   repository's own files.
+
+Until step 3 is done, a red CI check is informational rather than blocking — CI reports, but nothing
+stops a direct push to `main`.
+
 ## Gate H3 — AWS development/staging (before T31)
 
 1. Create or sign in to AWS account; set billing budgets and alert thresholds before deploying anything.

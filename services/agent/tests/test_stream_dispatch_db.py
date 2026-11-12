@@ -37,7 +37,9 @@ from opspilot_agent.streams.envelope import (
 from opspilot_agent.streams.leases import acquire_run_lease
 from tests.conftest import insert_document, insert_run, insert_ticket, insert_user
 
-pytestmark = pytest.mark.db
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# cross-tenant event rejection.
+pytestmark = [pytest.mark.db, pytest.mark.security]
 
 SECRET = "a-local-test-secret-long-enough-for-hs256"
 FAQ_TEXT = b"""# Shipping FAQ

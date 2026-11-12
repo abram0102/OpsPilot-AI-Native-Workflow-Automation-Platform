@@ -2,8 +2,10 @@ package com.opspilot.common.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -17,6 +19,17 @@ class TestEchoController {
   @PostMapping("/__test/echo")
   EchoRequest echo(@Valid @RequestBody EchoRequest request) {
     return request;
+  }
+
+  /**
+   * A required query parameter, so {@link GlobalExceptionHandlerTest} can exercise the "client left
+   * out a parameter" path. T28's endpoint sweep found that case answering 500 on a real endpoint
+   * ({@code PUT .../knowledge/uploads/local-object}), which is why it is now tested here rather
+   * than only observed there.
+   */
+  @GetMapping("/__test/echo-param")
+  String echoParam(@RequestParam String required) {
+    return required;
   }
 
   record EchoRequest(@NotBlank String name) {}

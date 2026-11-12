@@ -12,6 +12,10 @@ from opspilot_agent.knowledge.storage import (
     StorageError,
 )
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# object-key path escape.
+pytestmark = pytest.mark.security
+
 
 def test_reads_an_object_written_the_way_the_java_adapter_writes_it(tmp_path: Path) -> None:
     store = LocalObjectStore(tmp_path)

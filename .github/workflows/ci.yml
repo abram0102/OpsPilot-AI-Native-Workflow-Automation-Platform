@@ -35,6 +35,32 @@ jobs:
           # check itself is what blocks merges, so the comment is skipped.
           GITLEAKS_ENABLE_COMMENTS: "false"
 
+  deps:
+    name: Dependency advisories (OSV)
+    runs-on: ubuntu-latest
+    # docs/SECURITY_AND_TESTING.md §8.5: "dependency advisory check with actionable report", and
+    # §1 "Supply chain: dependency/lockfile updates, Dependabot or equivalent".
+    # Dependabot (.github/dependabot.yml) opens the update PRs; this job is the gate that fails
+    # one. OSV-Scanner reads all three of this repo's lockfiles (services/api/pom.xml,
+    # services/agent/uv.lock, apps/web/pnpm-lock.yaml) in a single pass with no API key, registry
+    # account or NVD throttling — which is why it replaced the obvious alternative of three
+    # ecosystem-native audit commands with three output formats and three failure conventions.
+    #
+    # `security-events: write` would let the scanner upload SARIF into the Security tab's code
+    # scanning alerts. This workflow stays read-only (see the top-level `permissions`), so the
+    # report is the job log and the failed check itself. Turning on the Security tab's alerts is a
+    # repository-settings change and therefore a human gate — see docs/MANUAL_SETUP.md.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Scan committed lockfiles
+        uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
+        with:
+          # Newline-separated, as the action's own `args` expects. Same scan `make audit-deps`
+          # runs locally, pinned to the same scanner version (2.7.1).
+          scan-args: |-
+            --recursive
+            ./
+
   shell:
     name: Shell scripts (shellcheck)
     runs-on: ubuntu-latest
@@ -49,6 +75,15 @@ jobs:
             exit 0
           fi
           shellcheck "${scripts[@]}"
+
+  docs:
+    name: Threat model references
+    runs-on: ubuntu-latest
+    # docs/TASKS.md T28: the threat model's "Test" column must keep naming tests that exist. A
+    # renamed security test fails here rather than quietly turning a row into fiction.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/check-threat-model.py
 
   api:
     name: Java (services/api)
@@ -72,6 +107,12 @@ jobs:
       # (see docs/PROGRESS.md T02).
       - name: Build and test
         run: ./mvnw -B test
+      # Re-run the security-tagged classes on their own (docs/TASKS.md T28). They already ran
+      # above; what this adds is a named check whose red/green state is readable without opening
+      # the log, and a build that fails if the tag selection ever matches nothing — a security
+      # suite that silently stopped selecting anything is the failure mode worth guarding.
+      - name: Security regression suite (must actually select tests)
+        run: ./mvnw -B test -Dgroups=security
 
   agent:
     name: Python (services/agent)
@@ -138,6 +179,12 @@ jobs:
       # lost service container fails the build instead of passing while proving nothing.
       - name: Redis-backed tests (must actually run)
         run: uv run pytest -m redis --strict-markers
+        env:
+          AI_MODE: mock
+      # docs/TASKS.md T28, same reasoning as the Java job's security step: a named check, and a
+      # failure if the marker ever selects nothing.
+      - name: Security regression suite (must actually select tests)
+        run: uv run pytest -m security --strict-markers
         env:
           AI_MODE: mock
 

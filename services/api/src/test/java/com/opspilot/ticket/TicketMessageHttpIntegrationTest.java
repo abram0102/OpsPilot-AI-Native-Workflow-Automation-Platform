@@ -19,6 +19,7 @@ import com.opspilot.organization.OrganizationRepository;
 import java.security.KeyPair;
 import java.time.Instant;
 import java.util.UUID;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@Tag("security")
 class TicketMessageHttpIntegrationTest {
 
   private static final String AUDIENCE = "https://api.opspilot.local";

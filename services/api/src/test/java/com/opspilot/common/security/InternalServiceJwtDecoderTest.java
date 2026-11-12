@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -16,6 +17,7 @@ import org.springframework.security.oauth2.jwt.JwtException;
  * does prove is that the decoder itself is strict about the two things separating a worker
  * credential from a user one: the signing key and the audience.
  */
+@Tag("security")
 class InternalServiceJwtDecoderTest {
 
   private static final String SECRET = "a-local-test-secret-long-enough-for-hs256-signing";

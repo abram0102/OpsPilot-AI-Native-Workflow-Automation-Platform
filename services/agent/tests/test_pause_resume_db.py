@@ -31,7 +31,9 @@ from opspilot_agent.graphs.approvals import ApprovalStatus, read_approval
 from opspilot_agent.graphs.handler import execute_run, resume_run
 from tests.conftest import insert_run, insert_ticket, insert_user
 
-pytestmark = pytest.mark.db
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# approval forgery and duplicate execution on resume.
+pytestmark = [pytest.mark.db, pytest.mark.security]
 
 SECRET = "a-local-test-secret-long-enough-for-hs256"
 

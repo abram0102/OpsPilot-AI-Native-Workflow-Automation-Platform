@@ -3,3 +3,13 @@ allowBuilds:
   unrs-resolver: false
 minimumReleaseAgeExclude:
   - jsdom@31.0.0
+
+# docs/TASKS.md T28 / docs/DEPENDENCY_DECISIONS.md: GHSA-g3hv-75wg-m249 — minimatch 7.0.0–11.0.0
+# amplifies attacker-controlled glob patterns in firstPhasePreProcess(). It reaches this repo only
+# as a transitive devDependency of eslint-config-next (@typescript-eslint/typescript-estree pins
+# ^10.2.2), so it is never in the shipped bundle and the "attacker-controlled pattern" would have
+# to be a lint glob. It is still a finding `make audit-deps` and the CI OSV job will fail on, and
+# the fixed release is a drop-in for the lint toolchain's usage, so it is overridden rather than
+# ignored. Remove this once typescript-estree's own range reaches ^11.
+overrides:
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1

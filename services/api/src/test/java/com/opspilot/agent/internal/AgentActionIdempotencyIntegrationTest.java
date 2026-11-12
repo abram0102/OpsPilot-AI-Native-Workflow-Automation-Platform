@@ -41,6 +41,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +67,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
+@Tag("security")
 class AgentActionIdempotencyIntegrationTest {
 
   private static final int CONCURRENT_CALLERS = 10;

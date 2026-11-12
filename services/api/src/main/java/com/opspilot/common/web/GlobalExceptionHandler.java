@@ -10,7 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -114,6 +117,55 @@ public class GlobalExceptionHandler {
         HttpStatus.CONFLICT,
         "STATE_CONFLICT",
         "This record was changed by someone else — reload and try again.",
+        List.of(),
+        request);
+  }
+
+  /**
+   * The caller left out a required query parameter.
+   *
+   * <p>Added in T28, after {@code SecurityRegressionSweepIntegrationTest} swept every mapped
+   * endpoint and found {@code PUT .../knowledge/uploads/local-object} answering 500 when its
+   * required {@code objectKey} was absent: without this handler the exception reached the catch-all
+   * below. A malformed request is the caller's problem, and dressing it as a server failure is
+   * wrong twice over — the caller is told to retry something that cannot work, and the 5xx rate
+   * that docs/SECURITY_AND_TESTING.md §7 alerts on rises every time anyone probes the API, so a
+   * scanner looks exactly like an outage.
+   */
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ResponseEntity<ApiErrorResponse> handleMissingParameter(
+      MissingServletRequestParameterException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.BAD_REQUEST,
+        "VALIDATION_ERROR",
+        "Request failed validation.",
+        List.of(ex.getParameterName() + ": parameter is required."),
+        request);
+  }
+
+  /**
+   * Wrong verb for a path that exists. Spring's own status is already 405; without a handler the
+   * {@code @RestControllerAdvice} catch-all would override it with a 500.
+   */
+  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+  public ResponseEntity<ApiErrorResponse> handleMethodNotSupported(
+      HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.METHOD_NOT_ALLOWED,
+        "METHOD_NOT_ALLOWED",
+        "That method is not supported on this resource.",
+        List.of(),
+        request);
+  }
+
+  /** Body sent as a media type the endpoint does not read. Same reasoning as the 405 above. */
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  public ResponseEntity<ApiErrorResponse> handleUnsupportedMediaType(
+      HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+    return respond(
+        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+        "UNSUPPORTED_MEDIA_TYPE",
+        "That content type is not supported on this resource.",
         List.of(),
         request);
   }

@@ -26,7 +26,9 @@ from opspilot_agent.knowledge.storage import LocalObjectStore
 from opspilot_agent.providers.mock import MockEmbeddingProvider, MockLLMProvider
 from tests.conftest import insert_document, insert_run, insert_ticket, insert_user
 
-pytestmark = pytest.mark.db
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# prompt injection via document text, cross-tenant retrieval, run budgets.
+pytestmark = [pytest.mark.db, pytest.mark.security]
 
 FAQ_TEXT = b"""# Shipping FAQ
 

@@ -26,7 +26,9 @@ from opspilot_agent.knowledge.storage import LocalObjectStore
 from opspilot_agent.providers.mock import MockEmbeddingProvider
 from tests.conftest import insert_document, insert_user
 
-pytestmark = pytest.mark.db
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# tenant isolation on documents, chunks and vector search.
+pytestmark = [pytest.mark.db, pytest.mark.security]
 
 FAQ_CORPUS = Path(__file__).resolve().parents[3] / "evals" / "datasets" / "faq_corpus_v1"
 

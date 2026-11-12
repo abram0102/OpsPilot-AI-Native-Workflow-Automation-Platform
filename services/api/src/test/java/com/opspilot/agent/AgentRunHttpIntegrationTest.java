@@ -26,6 +26,7 @@ import java.security.KeyPair;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@Tag("security")
 class AgentRunHttpIntegrationTest {
 
   private static final String AUDIENCE = "https://api.opspilot.local";
@@ -316,6 +318,46 @@ class AgentRunHttpIntegrationTest {
         .andExpect(jsonPath("$.items.length()").value(1))
         .andExpect(jsonPath("$.items[0].id").value(secondRunId.toString()))
         .andExpect(jsonPath("$.items[0].ticketId").value(secondTicketId.toString()));
+  }
+
+  @Test
+  void theUnfilteredRunListNeverIncludesAnotherOrganizationsRuns() throws Exception {
+    // Added by T28's deliberate-regression drill (docs/PROGRESS.md). Dropping `organizationId`
+    // from the keyset page queries was caught by exactly one test — the ticket-filter one below —
+    // because every other list test seeds runs in a single tenant, and the membership check
+    // (which is a separate mechanism) kept the sweep's stranger out. So the plain list, the call
+    // the UI actually makes on every page load, had no direct cross-tenant assertion at all.
+    //
+    // Two tenants, both with a run, listed by a member of one of them. If the tenant predicate
+    // ever leaves the query again, this fails on the obvious path rather than only on a filtered
+    // one.
+    Customer foreign =
+        customers.saveAndFlush(
+            new Customer(otherOrgId, "Mallory", "mallory-" + UUID.randomUUID() + "@x.test"));
+    UUID foreignTicketId =
+        tickets
+            .saveAndFlush(
+                new Ticket(
+                    otherOrgId,
+                    foreign.getId(),
+                    "Other tenant's ticket",
+                    "Body",
+                    TicketPriority.LOW,
+                    outsider.getId()))
+            .getId();
+    UUID foreignRunId = runIdOf(startRunOn(outsider, otherOrgId, foreignTicketId, null));
+    UUID ownRunId = runIdOf(startRun(member, null));
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/runs", orgId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(member)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(1))
+        .andExpect(jsonPath("$.items[0].id").value(ownRunId.toString()))
+        // Named explicitly: a length assertion alone would still pass if the page happened to be
+        // capped at one row while containing the wrong one.
+        .andExpect(jsonPath("$.items[?(@.id=='" + foreignRunId + "')]").isEmpty());
   }
 
   @Test

@@ -4,6 +4,10 @@ import pytest
 
 from opspilot_agent.config import AiMode, Settings
 
+# docs/TASKS.md T28: part of the security regression suite (`make test-security`) —
+# API key masking and real-mode preconditions.
+pytestmark = pytest.mark.security
+
 
 def test_mock_mode_needs_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LLM_API_KEY", raising=False)

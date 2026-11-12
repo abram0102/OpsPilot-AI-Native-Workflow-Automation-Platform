@@ -8,6 +8,7 @@ import com.opspilot.TestcontainersConfiguration;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc
+@Tag("security")
 class JwtAuthenticationIntegrationTest {
 
   private static final String AUDIENCE = "https://api.opspilot.local";

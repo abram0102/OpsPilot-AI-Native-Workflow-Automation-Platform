@@ -45,6 +45,11 @@ markers = [
     # and the fixture fails rather than skips in CI, where the service container should have
     # provided one.
     "redis: requires a real Redis server",
+    # The security/tenant-isolation regression suite (docs/TASKS.md T28), run on its own by
+    # `make test-security`. Applied per module rather than per test: these modules are about a
+    # security property start to finish, and a marker that has to be remembered on each new test
+    # is a marker that will be forgotten.
+    "security: part of the security regression suite",
 ]
 
 [build-system]
