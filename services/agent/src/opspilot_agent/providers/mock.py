@@ -119,15 +119,42 @@ def _mock_classification(text: str) -> Classification:
     )
 
 
+#: The line the graph and the evaluation harness use to tell a model which excerpt identifiers it
+#: is allowed to cite. The mock reads it for the same reason a real model would.
+CITABLE_PREFIX = "Citable excerpt identifiers:"
+
+
+def _offered_citations(text: str) -> list[str]:
+    """Identifiers the caller said may be cited, in the order offered."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(CITABLE_PREFIX):
+            listed = stripped[len(CITABLE_PREFIX) :]
+            return [item.strip() for item in listed.split(",") if item.strip()]
+    return []
+
+
 def _mock_reply_draft(text: str) -> ReplyDraft:
     category, _ = classify_category(text)
     body = (
         f"Thanks for getting in touch about your {category.value.lower()} issue. "
         "A support agent is reviewing the details and will follow up shortly."
     )
-    # Citations stay empty by design: nothing has been retrieved. Grounded citations arrive once
-    # the indexer (T16) and the graph that feeds it into a prompt (T19) exist.
-    return ReplyDraft(body=body, source_citations=[])
+
+    # Cites only from what the caller offered, and never invents an identifier — which is the
+    # property the grounding metric exists to check, so a mock that fabricated one would make the
+    # offline evaluation measure the opposite of the truth.
+    #
+    # When nothing is offered, citations stay empty, as they always did: a caller that supplied no
+    # excerpts has nothing to ground against, and T16/T19's own tests depend on that.
+    offered = _offered_citations(text)
+    if not offered:
+        return ReplyDraft(body=body, source_citations=[])
+
+    # Deterministic: prefer the excerpt whose identifier names the chosen category, else the first
+    # one offered. Determinism is the whole point of this provider — two runs must agree.
+    preferred = [item for item in offered if category.value.lower() in item.lower()]
+    return ReplyDraft(body=body, source_citations=[(preferred or offered)[0]])
 
 
 def build_mock_llm_provider() -> MockLLMProvider:

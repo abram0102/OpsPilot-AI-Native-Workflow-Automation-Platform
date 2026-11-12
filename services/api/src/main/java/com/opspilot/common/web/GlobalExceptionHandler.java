@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Maps exceptions to the single stable error envelope defined in docs/API_CONTRACT.md. Never
@@ -168,6 +169,24 @@ public class GlobalExceptionHandler {
         "That content type is not supported on this resource.",
         List.of(),
         request);
+  }
+
+  /**
+   * A URL that maps to nothing.
+   *
+   * <p>Found in T30 by a metrics test asking for an endpoint that was not registered: an
+   * authenticated caller requesting a path that does not exist got 500 {@code INTERNAL_ERROR}. Same
+   * family as the 400/405/415 handlers above (T28) and the same reasoning — a mistyped URL is the
+   * caller's problem, and reporting it as a server failure raises the 5xx rate that
+   * docs/SECURITY_AND_TESTING.md §7 alerts on.
+   *
+   * <p>Unauthenticated callers never reach this: the security filter chain answers 401 for any
+   * unknown path first, so nothing here helps an unauthenticated prober enumerate routes.
+   */
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<ApiErrorResponse> handleNoResource(
+      NoResourceFoundException ex, HttpServletRequest request) {
+    return respond(HttpStatus.NOT_FOUND, "NOT_FOUND", "No such resource.", List.of(), request);
   }
 
   @ExceptionHandler(Exception.class)

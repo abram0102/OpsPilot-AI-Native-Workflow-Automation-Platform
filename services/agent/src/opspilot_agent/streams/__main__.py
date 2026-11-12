@@ -20,6 +20,7 @@ import signal
 import sys
 
 from opspilot_agent.config import get_settings
+from opspilot_agent.observability import configure_error_reporting
 from opspilot_agent.streams.consumer import StreamConsumer, queue_health
 
 log = logging.getLogger("opspilot_agent.streams")
@@ -85,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+    # Before anything that could fail, so a startup error is itself reportable. Inert unless
+    # SENTRY_DSN is set; raises rather than pretending if a DSN is set without the SDK (T30).
+    configure_error_reporting(get_settings())
 
     if args.health:
         return asyncio.run(_report_health())

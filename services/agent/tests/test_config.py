@@ -109,3 +109,51 @@ def test_a_real_cost_rate_is_still_parsed(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("LLM_INPUT_COST_PER_MTOK", "3.50")
 
     assert Settings().llm_input_cost_per_mtok == Decimal("3.50")
+
+
+class TestOptionalErrorReporting:
+    """T30: "Sentry error integration as optional env"."""
+
+    def test_no_dsn_means_nothing_is_configured(self) -> None:
+        from opspilot_agent.observability import configure_error_reporting
+
+        assert configure_error_reporting(Settings()) is False
+
+    def test_a_dsn_without_the_sdk_raises_rather_than_pretending(self, monkeypatch) -> None:
+        # The failure mode that matters: an operator sets a DSN, believes errors are being
+        # reported, and they are not. Silence here would be worse than the misconfiguration.
+        import builtins
+
+        from opspilot_agent.observability import (
+            SentryNotInstalledError,
+            configure_error_reporting,
+        )
+
+        real_import = builtins.__import__
+
+        def refuse_sentry(name, *args, **kwargs):
+            if name == "sentry_sdk":
+                raise ModuleNotFoundError("No module named 'sentry_sdk'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", refuse_sentry)
+
+        with pytest.raises(SentryNotInstalledError, match="not installed"):
+            configure_error_reporting(Settings(sentry_dsn="https://key@example.invalid/1"))
+
+    def test_it_never_sends_personal_data_or_local_variables(self, monkeypatch) -> None:
+        # AGENTS.md: a trace never logs tokens, cookies or unnecessary personal data. Both flags
+        # below default to the unsafe value in the SDK, so this asserts the two that matter.
+        import sys
+        import types
+
+        captured: dict = {}
+        fake = types.ModuleType("sentry_sdk")
+        fake.init = lambda **kwargs: captured.update(kwargs)
+        monkeypatch.setitem(sys.modules, "sentry_sdk", fake)
+
+        from opspilot_agent.observability import configure_error_reporting
+
+        assert configure_error_reporting(Settings(sentry_dsn="https://key@example.invalid/1"))
+        assert captured["send_default_pii"] is False
+        assert captured["include_local_variables"] is False

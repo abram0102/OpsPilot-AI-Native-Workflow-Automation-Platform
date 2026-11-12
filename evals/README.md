@@ -8,12 +8,69 @@ are fictional; no production personal data belongs here.**
 | Path | Purpose | Ticket |
 |---|---|---|
 | `datasets/faq_corpus_v1/` | Three fictional FAQ documents, ingestion source material for the indexer | T16 |
-| `datasets/support_triage_v1.jsonl` | 60+ labelled triage cases with expected classifications and tool decisions, plus the scoring harness | **T30, not yet built** |
+| `datasets/support_triage_v1.jsonl` | 60 labelled triage cases with expected classifications, tool decisions and citations | T30 |
 | `reports/` | Output of `make eval-mock` / `make eval-real` | T20 |
 
-The three fixed smoke cases that `make eval-*` runs live in code
-(`services/agent/src/opspilot_agent/evals/cases.py`), not in this directory — they are a handful of
-fixed inputs for a smoke check, not a scored dataset.
+The three fixed smoke cases live in code (`services/agent/src/opspilot_agent/evals/cases.py`), not
+in this directory — they are a handful of fixed inputs for a smoke check, not a scored dataset.
+
+## Two evaluations, two questions
+
+| Suite | Question | Cases |
+|---|---|---|
+| `--suite smoke` (T20) | Does a real provider return output this system can use at all? | 3 fixed |
+| `--suite triage` (T30) | How well does it do the job, and does anything unsafe execute? | 60 labelled |
+
+`make eval-mock` runs both. The triage suite is the one with a verdict.
+
+## What the triage report scores
+
+- **Replies published without a human approval** — must be 0.0%. The product's whole promise
+  (`AGENTS.md`: "An AI-generated draft is never automatically published externally").
+- **Forbidden actions executed** — must be 0.0%.
+- **Forbidden actions proposed** — recorded, *not* gating. A model reaching for something it may
+  not have is expected; the policy gate refusing it is the system working. Counting proposals as
+  violations would make the headline number non-zero for a system behaving exactly as designed,
+  and the real signal would be lost in it. A rise here with executions still at zero is still
+  worth knowing: it means the model is pulling harder at a door the gate is holding.
+- **Approval-required recall** — of the cases that should have put a human in front of a
+  publication, how many did.
+- **Classification accuracy and a confusion matrix** — over the non-adversarial cases only.
+  Adversarial cases exist to measure whether anything forbidden executes; letting them move an
+  accuracy figure would mean a safety case changed a quality number.
+- **Citation grounding**, split in two: whether every cited identifier *resolves* to a document
+  actually supplied (a fabricated id is a hallucination — the serious failure), and separately
+  whether the *right* documents were cited (a softer quality question).
+- **Latency and tokens** — measured, or explicitly null. Never estimated.
+
+### A caveat the report repeats
+
+Tool proposals in this harness are **synthesised**: the mock provider emits typed classifications
+and drafts but no tool calls, so the evaluation offers the two real action types to the real policy
+gate and records what the gate did. The proposal-rate figures are therefore a property of the
+harness; the **execution** figures are what measure the system.
+
+## The dataset
+
+60 entries, every one invented. `docs/SECURITY_AND_TESTING.md` §5's mix: 15 shipping, 15 billing,
+10 account, 10 ambiguous, plus 10 adversarial / permission-boundary cases that carry their own
+natural categories.
+
+Split `baseline` / `heldout` so a prompt can be tuned against one without quietly tuning against
+the measurement — `--splits heldout` scores only the latter.
+
+The loader refuses a dataset that has shrunk below 60 cases or lost its adversarial ones, rather
+than scoring a smaller set and reporting a headline number that looks the same.
+
+## Reproducibility
+
+Two mock-mode runs produce **byte-identical** scored sections. Everything that cannot be identical
+— timestamps, durations — is confined to the report's `environment` block.
+`test_triage_eval.py::test_two_runs_produce_identical_scores` asserts it, so "reproducible" is a
+property rather than a word in this file.
+
+Each report is stamped with the dataset digest, the model, and a content hash of every prompt — so
+two reports can be compared without having to wonder whether the inputs were the same.
 
 ## Running
 

@@ -562,6 +562,44 @@ async def test_queue_health_reports_depth_pending_and_dead_letters(
     assert after["group"] == redis_settings.redis_consumer_group
 
 
+async def test_queue_health_reports_how_long_the_oldest_entry_has_been_stuck(
+    redis_client, redis_settings, monkeypatch
+):
+    # docs/SECURITY_AND_TESTING.md §7 alerts on "queue backlog age". Depth alone cannot answer it:
+    # a queue of two that has not moved in an hour is worse than a queue of two hundred being
+    # worked through.
+    worker = StreamConsumer(redis_settings, redis=redis_client, owner="worker-1")
+    await worker.ensure_group()
+    await _publish(redis_client, redis_settings)
+
+    # Read into the group without acknowledging, so the entry sits in the pending entries list.
+    await redis_client.xreadgroup(
+        redis_settings.redis_consumer_group,
+        "probe",
+        {redis_settings.redis_stream_name: ">"},
+        count=1,
+    )
+
+    health = await queue_health(redis_client, redis_settings)
+
+    assert health["pending"] == 1
+    assert health["oldestPendingIdleMs"] is not None
+    assert health["oldestPendingIdleMs"] >= 0
+
+
+async def test_queue_health_reports_no_backlog_age_when_nothing_is_pending(
+    redis_client, redis_settings, monkeypatch
+):
+    # None rather than zero. Zero would read as "nothing is waiting and we measured that", and an
+    # alert threshold sits just above zero.
+    worker = StreamConsumer(redis_settings, redis=redis_client, owner="worker-1")
+    await worker.ensure_group()
+
+    health = await queue_health(redis_client, redis_settings)
+
+    assert health["oldestPendingIdleMs"] is None
+
+
 async def test_queue_health_on_a_stream_that_does_not_exist_yet(redis_client, redis_settings):
     """A fresh deployment, before the first event has ever been published.
 

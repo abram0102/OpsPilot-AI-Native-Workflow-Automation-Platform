@@ -388,4 +388,37 @@ async def queue_health(redis: Redis, settings: Settings) -> dict[str, object]:
         health["lag"] = None
         health["consumers"] = 0
 
+    health["oldestPendingIdleMs"] = await _oldest_pending_idle_ms(redis, settings)
     return health
+
+
+async def _oldest_pending_idle_ms(redis: Redis, settings: Settings) -> int | None:
+    """How long the longest-waiting unacknowledged entry has gone without progress.
+
+    docs/SECURITY_AND_TESTING.md §7 alerts on "queue backlog age", and depth alone does not answer
+    it: a queue of two that has not moved in an hour is a worse state than a queue of two hundred
+    being worked through. This is the number that distinguishes them.
+
+    The oldest entry, not an average — the same reasoning as the API's oldest-pending-approval
+    gauge. A mean hides the one entry that is stuck behind the many that are fine.
+
+    None, never zero, when there is nothing pending or the stream does not exist yet: zero would
+    read as "nothing is waiting and we measured that", and an alert threshold sits just above zero.
+    """
+    try:
+        entries = await redis.xpending_range(
+            settings.redis_stream_name,
+            settings.redis_consumer_group,
+            min="-",
+            max="+",
+            count=1,
+        )
+    except ResponseError as error:
+        if "no such key" in str(error).lower() or "nogroup" in str(error).lower():
+            return None
+        raise
+
+    if not entries:
+        return None
+    idle = entries[0].get("time_since_delivered")
+    return int(idle) if idle is not None else None

@@ -184,10 +184,10 @@ audit-deps: ## Scan the committed lockfiles for known vulnerabilities (OSV) — 
 	}
 	osv-scanner scan source --recursive .
 
-eval-mock: ## Run the offline smoke evaluation (no API key, no cost) — T20; scored dataset is T30
+eval-mock: ## Run the offline evaluations: smoke (T20) + scored triage over 60 cases (T30)
 	cd services/agent && uv run python -m opspilot_agent.evals
 
-eval-real: ## Run the real-provider smoke evaluation — BILLABLE, requires Gate H2 — T20
+eval-real: ## Run the real-provider evaluations — BILLABLE, requires Gate H2 — T20/T30
 	@printf '\033[33m! %s calls a paid LLM provider.\033[0m It refuses unless Gate H2 is set up (AI_MODE=real, ALLOW_REAL_LLM_CALLS, LLM_API_KEY, model ids).\n' "$@" >&2
 	cd services/agent && uv run python -m opspilot_agent.evals --real
 

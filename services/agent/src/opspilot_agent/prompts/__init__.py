@@ -11,6 +11,7 @@ enough to reproduce what the model was actually told.
 
 from __future__ import annotations
 
+import hashlib
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -30,3 +31,18 @@ def load_prompt(name: PromptName) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"Prompt file is missing: {path}")
     return path.read_text(encoding="utf-8").strip()
+
+
+def prompt_revisions() -> dict[str, str]:
+    """Each prompt's revision name and a digest of what it actually says.
+
+    The revision name alone is not quite enough to stamp a run with (T30: "prompt version/model/
+    cost stamping"). A revision is supposed to be immutable once released, but "supposed to be" is
+    not a guarantee a report can rely on — an edit to `classification.v1.md` would leave every
+    past and future run claiming the same version while the model was told something different.
+    The digest makes that visible in a diff of two reports.
+    """
+    return {
+        name.value: hashlib.sha256(load_prompt(name).encode("utf-8")).hexdigest()[:12]
+        for name in PromptName
+    }

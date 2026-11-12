@@ -752,3 +752,85 @@ loudly rather than quietly reach someone's tenant.
 **Rejected: putting Playwright in `apps/web`.** It is not part of the shipped application, and a
 test-runner dependency inside the web package puts it in the same dependency graph as the thing it
 tests. `tests/e2e` is its own package with its own lockfile — which the OSV job then scans too.
+
+## ADR-055 — T30: the evaluation scores executions, not intentions, and reports what it does not know
+
+**Context.** T20 left a smoke evaluation: three fixed tickets through the provider, with an honest
+report (null cost rather than a guessed one). T30 asks for the scored thing — sixty labelled cases,
+a confusion matrix, unauthorized-action checks, grounded citations, and a report that is
+*reproducible*.
+
+**Decision 1 — the dataset is JSONL on disk, validated on load.** It is data: it should be
+diffable, countable and editable without touching code. The loader refuses a file that has fallen
+below sixty cases or lost its adversarial ones, because a dataset that quietly shrank would still
+produce a confident-looking report — over fewer cases, with a headline number that looks the same.
+
+**Decision 2 — the hard-zero metric counts executions, not proposals.** This is the one that took
+thought, and the first implementation got it wrong in a way worth recording.
+
+A model proposing something it may not do is *expected*. The whole architecture assumes it: that is
+why the policy gate is deterministic code rather than a prompt. Counting proposals as violations
+would make the headline number non-zero for a system behaving exactly as designed, and the real
+signal would vanish into it. So `forbidden_action_rate` counts what the gate let through, and
+`forbidden_proposal_rate` is recorded separately and does not gate — a rise there while executions
+stay at zero means the model is pulling harder at a door the gate is still holding, which is worth
+knowing and is not an incident.
+
+The first run then reported a 16.7% proposal rate, and the number was meaningless: it was ten
+adversarial cases where the dataset said only tagging was permitted, against a harness that offers
+both actions for every case. It was measuring the harness. Two changes followed. `allowed_actions`
+now means "what the agent may legitimately *propose*", which is the same two actions for every
+ticket — what makes a case adversarial is that it asks for something with no action type at all (a
+refund, a SQL statement, another tenant's data). And the metric that actually encodes the product's
+promise was added: **`published_without_approval_rate`**, which must be zero, and which is not an
+artifact of anything.
+
+**Decision 3 — reproducibility is structural, not aspirational.** Cases sort by id, every metric is
+a pure function over observations, and everything that *cannot* be reproducible — timestamps,
+durations — lives in a single `environment` block that `scored_payload()` drops. Two mock-mode runs
+produce byte-identical scored sections (30,063 bytes), asserted by
+`test_two_runs_produce_identical_scores`, which also asserts the timestamps *do* differ so the
+comparison cannot be passing because the report is static.
+
+**Decision 4 — the mock may now cite, but only what it was offered.** It returned no citations at
+all, so every grounding metric read "unknown" and the whole section was decoration. It now cites
+from the identifiers the prompt supplies and never invents one — which is the property the metric
+exists to check, so a mock that fabricated one would make the offline evaluation measure the
+opposite of the truth. When nothing is offered it still returns nothing, which is what T16/T19's
+tests depend on, so none of them changed. Grounding went from vacuous to 100% resolvable / 55%
+precision — a real number about a real weakness.
+
+**Decision 5 — metrics are gauges read from the database.** A counter needs an increment at every
+write site; every new path is a chance to miss one, and a missed increment is invisible because the
+metric just reads low forever. Reading the database cannot drift from it. Cached for fifteen
+seconds so a misconfigured scraper cannot turn monitoring into load, and each read falls back to the
+last good value rather than throwing — a failing `/actuator/prometheus` reads as "the service is
+broken" when the truth is "monitoring is broken".
+
+Approval age is the **oldest** pending approval, not a mean, for the same reason the worker reports
+the oldest stuck queue entry: the question is "is anything waiting too long", and a mean hides
+precisely that.
+
+**Two bugs found by building this.**
+
+1. **`@ConditionalOnBean(MeterRegistry.class)` silently excluded the metrics bean.** That annotation
+   is evaluated in bean-definition order and is only reliable inside auto-configuration. The first
+   run of `MetricsEndpointIntegrationTest` scraped a perfectly healthy endpoint carrying none of
+   the new metrics — the most dangerous shape of failure, since everything looked fine. The
+   registry is now injected directly, so a missing one is a startup failure.
+2. **A URL that maps to nothing returned 500.** The metrics test asked for an endpoint that was not
+   yet registered and got `INTERNAL_ERROR`. Same family as T28's 400/405/415 findings and the same
+   consequence: a mistyped URL inflating the 5xx rate that §7 alerts on. `NoResourceFoundException`
+   now maps to 404. Unauthenticated callers never reach it — the filter chain answers 401 for any
+   unknown path first — so it helps no one enumerate routes.
+
+**Rejected: wiring an OTLP exporter.** §7 names OpenTelemetry. Correlation ids and metrics are
+implemented; span export is not, and there is no collector here to verify against. Shipping an
+exporter that has never sent a span is exactly the "working integration" AGENTS.md forbids
+inventing, so it is listed in docs/OBSERVABILITY.md under *Not implemented* with the reason.
+
+**Rejected: `sentry-sdk` as a dependency.** A project that ships an error-reporting client it has
+never configured gains a package, an outbound network client and a supply-chain entry in exchange
+for nothing. The import is lazy and the feature inert unless `SENTRY_DSN` is set — but a DSN set
+*without* the SDK raises rather than continuing quietly, because the failure worth preventing is an
+operator believing errors are reported when they are not.

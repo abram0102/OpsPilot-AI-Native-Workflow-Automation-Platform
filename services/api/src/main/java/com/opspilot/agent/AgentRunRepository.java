@@ -26,6 +26,9 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
    * This is the query the reclaimer in T25 needs, and the reason V004 indexes {@code (status,
    * lease_expires_at)} over exactly the non-terminal states.
    */
+  /** Run status distribution (docs/SECURITY_AND_TESTING.md §7), for T30's metrics. */
+  long countByStatus(AgentRunStatus status);
+
   @Query(
       """
       SELECT r FROM AgentRun r

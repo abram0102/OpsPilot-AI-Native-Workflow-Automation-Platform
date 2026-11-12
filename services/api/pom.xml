@@ -37,6 +37,18 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
+		<!--
+			T30: the metrics backend behind Actuator. Prometheus rather than a hosted vendor's
+			registry because it is the one that works identically on a laptop, in CI and on a
+			cluster, with no account to create and nothing to pay — and docs/SECURITY_AND_TESTING.md
+			§7 asks for p50/p95 and error rates, which Micrometer's http.server.requests histogram
+			provides without any code of ours. The endpoint is NOT publicly exposed; see
+			application.yml and SecurityConfig.
+		-->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-flyway</artifactId>

@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     llm_circuit_breaker_threshold: int = 5
     llm_circuit_breaker_reset_seconds: float = 60.0
 
+    # T30, optional error reporting. Empty means off, which is the default and the only state
+    # this repository is ever tested in with a real destination. `sentry-sdk` is deliberately not
+    # a dependency — see observability.configure_error_reporting for why, and for what happens if
+    # this is set without it installed.
+    sentry_dsn: str | None = None
+
     @model_validator(mode="after")
     def _require_provider_credentials_outside_mock_mode(self) -> Settings:
         has_api_key = self.llm_api_key is not None and bool(self.llm_api_key.get_secret_value())

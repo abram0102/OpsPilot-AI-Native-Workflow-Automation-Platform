@@ -1,8 +1,16 @@
-"""CLI for the smoke evaluation. Backs `make eval-mock` and `make eval-real`.
+"""CLI for the evaluations. Backs `make eval-mock` and `make eval-real`.
 
-Mock is the default and needs nothing. Real refuses unless Gate H2 is genuinely
-in place, printing the full checklist rather than a single error — see
-`preflight.refusal_message`.
+Two evaluations, because they answer different questions. The **smoke** run (T20) puts three fixed
+tickets through the provider and checks the output is usable at all — it is what you want when
+pointing at a real provider for the first time, and it is capped so a misconfiguration cannot
+become a bill. The **triage** run (T30) scores sixty labelled cases and is the one with a verdict:
+classification accuracy, citation grounding, and the forbidden-action rate that must be zero.
+
+`--suite` picks. The default is both, because `make eval-mock` costs nothing and a developer who
+runs only the smoke set would not notice a scored regression.
+
+Mock is the default and needs nothing. Real refuses unless Gate H2 is genuinely in place, printing
+the full checklist rather than a single error — see `preflight.refusal_message`.
 """
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ from pathlib import Path
 from opspilot_agent.config import AiMode, get_settings
 from opspilot_agent.evals.preflight import check_real_eval_allowed, refusal_message
 from opspilot_agent.evals.smoke import run_smoke_eval, write_report
+from opspilot_agent.evals.triage import render_markdown, run_triage_eval, write_reports
 
 # parents[5] is the repository root: evals/__main__.py -> evals -> opspilot_agent -> src ->
 # agent -> services -> <root>. Counted rather than guessed, after an off-by-one wrote a report
@@ -34,6 +43,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
+    parser.add_argument(
+        "--suite",
+        choices=("smoke", "triage", "all"),
+        default="all",
+        help="smoke = T20's three fixed cases; triage = T30's scored dataset; all = both.",
+    )
+    parser.add_argument(
+        "--splits",
+        default="baseline,heldout",
+        help="Which dataset splits the triage suite scores. Held-out exists so a prompt can be "
+        "tuned against baseline without quietly tuning against the measurement.",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -59,12 +80,29 @@ def main(argv: list[str] | None = None) -> int:
         settings if args.real else settings.model_copy(update={"ai_mode": AiMode.MOCK})
     )
 
-    report = asyncio.run(run_smoke_eval(settings_for_run, max_cases=args.max_cases))
-    path = write_report(report, args.report_dir)
+    exit_code = 0
 
-    print(report.to_json())
-    print(f"\nReport written to {path}", file=sys.stderr)
-    return 0 if report.all_ok else 1
+    if args.suite in ("smoke", "all"):
+        smoke = asyncio.run(run_smoke_eval(settings_for_run, max_cases=args.max_cases))
+        smoke_path = write_report(smoke, args.report_dir)
+        print(f"Smoke report written to {smoke_path}", file=sys.stderr)
+        if not smoke.all_ok:
+            exit_code = 1
+
+    if args.suite in ("triage", "all"):
+        splits = tuple(s.strip() for s in args.splits.split(",") if s.strip())
+        triage = asyncio.run(
+            run_triage_eval(settings_for_run, splits=splits, max_cases=args.max_cases)
+        )
+        json_path, md_path = write_reports(triage, args.report_dir)
+        # The Markdown goes to stdout: it is the thing a person reads, and burying it in a file
+        # while printing JSON would mean nobody ever sees the verdict without opening something.
+        print(render_markdown(triage))
+        print(f"\nTriage reports written to {json_path} and {md_path}", file=sys.stderr)
+        if not triage.passed:
+            exit_code = 1
+
+    return exit_code
 
 
 if __name__ == "__main__":

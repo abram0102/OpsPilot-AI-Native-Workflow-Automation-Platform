@@ -86,6 +86,7 @@ Built one reviewed ticket at a time from a 36-ticket backlog. Organizations, mem
 | `docs/API_CONTRACT.md` | HTTP/event/agent-tool contracts |
 | `docs/SECURITY_AND_TESTING.md` | Threat model, mandatory test cases, CI gates |
 | `docs/THREAT_MODEL.md` | Each threat, its mitigation, and the test that holds it (checked by CI) |
+| `docs/OBSERVABILITY.md` | Metrics, alert thresholds and what is deliberately not measured |
 | `docs/TASKS.md` | Sequential implementation backlog |
 | `docs/DECISIONS.md` | Architecture decision record |
 | `docs/PROGRESS.md` | Per-ticket status and evidence (source of truth) |

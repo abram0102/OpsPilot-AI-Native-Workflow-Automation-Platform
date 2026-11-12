@@ -1,3 +1,7 @@
 # Evaluation reports are generated artifacts, not source.
-*.json
+#
+# T30 added a Markdown report alongside the JSON, and this file only ignored *.json — so the first
+# `git add -A` after that staged five generated Markdown reports. Ignore by exception instead:
+# everything here is output unless it is explicitly listed.
+*
 !.gitignore

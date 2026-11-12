@@ -89,9 +89,16 @@ management:
   endpoints:
     web:
       exposure:
-        # Only health is exposed publicly. Never widen this to "*" or add
-        # other operational endpoints without a documented need (AGENTS.md).
-        include: health
+        # health and prometheus only. Never widen this to "*" or add other operational endpoints
+        # without a documented need (AGENTS.md).
+        #
+        # "Exposed" here means the endpoint exists at /actuator/**. It does NOT mean public:
+        # SecurityConfig permits only /actuator/health/**, so a scrape of /actuator/prometheus
+        # still needs a bearer token or a network path that never reaches the internet. That is
+        # deliberate — metrics name internal structure (endpoint templates, queue names, error
+        # codes) and a run-status distribution is a business figure (T30; docs/OBSERVABILITY.md
+        # explains how to scrape it).
+        include: health,prometheus
   endpoint:
     health:
       probes:
