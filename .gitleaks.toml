@@ -1,0 +1,22 @@
+# Secret-scanning configuration (docs/SECURITY_AND_TESTING.md §8.5; CI job "Secret scan").
+#
+# The default rule set is kept in full — this file only adds one narrowly-scoped exception.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+The E2E stack script sets AUTH0_DOMAIN to a deliberately unresolvable placeholder, and
+docs/DECISIONS.md ADR-054 and docs/PROGRESS.md quote that line while explaining this very
+exception. gitleaks' generic-api-key rule matches the assignment because the variable name
+contains AUTH0.
+
+`e2e.opspilot.invalid` is a name under the .invalid TLD, which RFC 2606 reserves and guarantees
+can never resolve. That is the reason it was chosen: if anything in the E2E suite ever attempted a
+real OIDC exchange, it fails loudly rather than quietly reaching somebody's tenant.
+
+Scoped to this one literal string rather than to the rule, the path or the file. Disabling
+generic-api-key, or allowlisting scripts/ or docs/, would also hide a real credential committed
+beside it — which is the only thing this job exists to catch.
+"""
+regexes = ['''e2e\.opspilot\.invalid''']
