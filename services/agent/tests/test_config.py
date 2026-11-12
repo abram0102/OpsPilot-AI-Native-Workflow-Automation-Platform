@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from opspilot_agent.config import AiMode, Settings
@@ -77,3 +79,29 @@ def test_the_shipped_worker_timings_are_the_ones_the_tests_deliberately_compress
     assert settings.worker_reclaim_min_idle_ms >= settings.worker_lease_seconds * 1000
     # And the lease must outlast several heartbeats, so one missed beat is not fatal.
     assert settings.worker_lease_seconds >= settings.worker_heartbeat_seconds * 3
+
+
+def test_an_empty_cost_rate_in_the_environment_means_no_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`.env.example` ships `LLM_INPUT_COST_PER_MTOK=` with no value.
+
+    `make worker-dev` sources that file, so the variable arrives *present but empty*. Pydantic sees
+    the empty string, not an absent value, and `Decimal | None` rejected it — the worker died on
+    startup before reading a single event. Found by actually running `make worker-dev`.
+    """
+    monkeypatch.setenv("AI_MODE", "mock")
+    monkeypatch.setenv("LLM_INPUT_COST_PER_MTOK", "")
+    monkeypatch.setenv("LLM_OUTPUT_COST_PER_MTOK", "   ")
+
+    settings = Settings()
+
+    assert settings.llm_input_cost_per_mtok is None
+    assert settings.llm_output_cost_per_mtok is None
+
+
+def test_a_real_cost_rate_is_still_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_MODE", "mock")
+    monkeypatch.setenv("LLM_INPUT_COST_PER_MTOK", "3.50")
+
+    assert Settings().llm_input_cost_per_mtok == Decimal("3.50")

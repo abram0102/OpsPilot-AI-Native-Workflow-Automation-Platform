@@ -12,16 +12,17 @@ interface AppShellProps {
 
 /**
  * Left nav + narrow top toolbar, per docs/PRODUCT_AND_ARCHITECTURE.md
- * section 6. "Dashboard", "Tickets" (T12), "Knowledge" (T14), "Approvals"
- * (T22) and "Settings" (members/invitations, T09) link somewhere real today;
- * the remaining org-scoped section (the run explorer UI) is added here as its
- * own ticket lands — not as a dead link ahead of time.
+ * section 6. Every entry links somewhere real: "Dashboard", "Tickets" (T12),
+ * "Knowledge" (T14), "Runs" (the run explorer, T27), "Approvals" (T22) and
+ * "Settings" (members/invitations, T09). Nothing is listed ahead of the ticket
+ * that builds it.
  */
 export function AppShell({ orgId, orgName, user, children }: AppShellProps) {
   const items: NavItem[] = [
     { href: `/app/${orgId}/dashboard`, label: "Dashboard" },
     { href: `/app/${orgId}/tickets`, label: "Tickets" },
     { href: `/app/${orgId}/knowledge`, label: "Knowledge" },
+    { href: `/app/${orgId}/runs`, label: "Runs" },
     { href: `/app/${orgId}/approvals`, label: "Approvals" },
     { href: `/app/${orgId}/settings/members`, label: "Settings" },
   ];
@@ -48,9 +49,6 @@ export function AppShell({ orgId, orgName, user, children }: AppShellProps) {
       <div className={styles.body}>
         <nav className={styles.nav} aria-label="Primary">
           <NavLinks items={items} />
-          <p className={styles.navNote}>
-            The run explorer UI is added as its ticket lands (see docs/TASKS.md).
-          </p>
         </nav>
         <main id="main-content" tabIndex={-1} className={styles.content}>
           {children}

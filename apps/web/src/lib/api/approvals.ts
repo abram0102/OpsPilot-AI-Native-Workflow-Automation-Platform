@@ -71,13 +71,27 @@ function toApproval(data: {
   };
 }
 
+/**
+ * The inbox, or one run's approvals.
+ *
+ * <p>Note the asymmetry, which comes from the API: with neither argument this returns `PENDING`
+ * only (the inbox's question is "what is waiting for me"), while `runId` returns that run's
+ * approvals whatever their status, because a run's page has to show the decision that was made.
+ */
 export async function listApprovals(
   organizationId: string,
   status?: ApprovalStatus,
+  runId?: string,
 ): Promise<Approval[]> {
   const client = await authorizedClient();
   const result = await client.GET("/api/v1/organizations/{orgId}/approvals", {
-    params: { path: { orgId: organizationId }, query: status ? { status } : {} },
+    params: {
+      path: { orgId: organizationId },
+      query: {
+        ...(status ? { status } : {}),
+        ...(runId ? { runId } : {}),
+      },
+    },
   });
   return (await unwrap(result)).map(toApproval);
 }

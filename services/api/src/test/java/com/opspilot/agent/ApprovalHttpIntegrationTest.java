@@ -1,6 +1,9 @@
 package com.opspilot.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -252,6 +255,94 @@ class ApprovalHttpIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(admin)))
         .andExpect(jsonPath("$.length()").value(1))
         .andExpect(jsonPath("$[0].status").value("PENDING"));
+  }
+
+  @Test
+  void aRunsOwnApprovalsAreListedWhateverTheirStatus() throws Exception {
+    // The inbox defaults to PENDING. A run's page must not: the decision a run was waiting on is
+    // the whole point of looking at it (T27).
+    Approval decided = pendingApproval("call-1", "{\"body\":\"One.\"}");
+    Approval stillPending = pendingApproval("call-2", "{\"body\":\"Two.\"}");
+    approvalService.decide(orgId, decided.getId(), ApprovalStatus.APPROVED, admin.getId());
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/approvals", orgId)
+                .param("runId", run.getId().toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(admin)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(
+            jsonPath(
+                "$[*].id", hasItems(decided.getId().toString(), stillPending.getId().toString())))
+        .andExpect(jsonPath("$[*].runId", everyItem(is(run.getId().toString()))));
+  }
+
+  @Test
+  void aRunFilterCombinesWithTheStatusFilter() throws Exception {
+    Approval decided = pendingApproval("call-1", "{\"body\":\"One.\"}");
+    pendingApproval("call-2", "{\"body\":\"Two.\"}");
+    approvalService.decide(orgId, decided.getId(), ApprovalStatus.APPROVED, admin.getId());
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/approvals", orgId)
+                .param("runId", run.getId().toString())
+                .param("status", "APPROVED")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(admin)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value(decided.getId().toString()));
+  }
+
+  @Test
+  void aRunIdFromAnotherOrganizationRevealsNothing() throws Exception {
+    // runId is client-supplied. Scoping happens in the query, so another tenant's run comes back
+    // as an empty list — not as that run's approvals, and not as a 404 that would confirm the run
+    // exists (AGENTS.md invariants).
+    // A real ticket in the other tenant, not a random UUID: agent_runs carries a composite
+    // foreign key on (ticket_id, organization_id), which is itself the schema refusing to let a
+    // run point at another tenant's ticket.
+    Customer foreignCustomer =
+        customers.saveAndFlush(
+            new Customer(otherOrgId, "Grace", "grace-" + UUID.randomUUID() + "@x.test"));
+    UUID foreignTicketId =
+        tickets
+            .saveAndFlush(
+                new Ticket(
+                    otherOrgId,
+                    foreignCustomer.getId(),
+                    "Other tenant's ticket",
+                    "Body",
+                    TicketPriority.LOW,
+                    outsider.getId()))
+            .getId();
+    AgentRun foreignRun =
+        runs.saveAndFlush(
+            new AgentRun(
+                otherOrgId, foreignTicketId, outsider.getId(), Workflow.SUPPORT_TRIAGE_V1, null));
+    pendingApproval();
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/approvals", orgId)
+                .param("runId", foreignRun.getId().toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(admin)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  @Test
+  void aMemberCannotListARunsApprovalsEither() throws Exception {
+    // The run filter must not become a way around the inbox's role check.
+    pendingApproval();
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/approvals", orgId)
+                .param("runId", run.getId().toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(member)))
+        .andExpect(status().isForbidden());
   }
 
   @Test

@@ -42,19 +42,22 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
    * <p>Split from {@link #findPageAfter} for the same reason the ticket queries are (see {@code
    * TicketRepository}): binding a null {@code Instant} whose only textual occurrence is an {@code
    * IS NULL} check gives Postgres no column to infer a type from, and it rejects the query
-   * outright. A nullable *enum* filter is fine in both, which is why {@code status} stays in one
-   * place.
+   * outright. A nullable *enum* or *uuid* filter is fine in both — each is compared against a typed
+   * column in the same predicate — which is why {@code status} and {@code ticketId} stay in one
+   * place and only the cursor is split out.
    */
   @Query(
       """
       SELECT r FROM AgentRun r
        WHERE r.organizationId = :organizationId
          AND (:status IS NULL OR r.status = :status)
+         AND (:ticketId IS NULL OR r.ticketId = :ticketId)
        ORDER BY r.createdAt DESC, r.id DESC
       """)
   List<AgentRun> findFirstPage(
       @Param("organizationId") UUID organizationId,
       @Param("status") AgentRunStatus status,
+      @Param("ticketId") UUID ticketId,
       Pageable pageable);
 
   @Query(
@@ -62,6 +65,7 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
       SELECT r FROM AgentRun r
        WHERE r.organizationId = :organizationId
          AND (:status IS NULL OR r.status = :status)
+         AND (:ticketId IS NULL OR r.ticketId = :ticketId)
          AND (r.createdAt < :cursorCreatedAt
               OR (r.createdAt = :cursorCreatedAt AND r.id < :cursorId))
        ORDER BY r.createdAt DESC, r.id DESC
@@ -69,6 +73,7 @@ public interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
   List<AgentRun> findPageAfter(
       @Param("organizationId") UUID organizationId,
       @Param("status") AgentRunStatus status,
+      @Param("ticketId") UUID ticketId,
       @Param("cursorCreatedAt") Instant cursorCreatedAt,
       @Param("cursorId") UUID cursorId,
       Pageable pageable);

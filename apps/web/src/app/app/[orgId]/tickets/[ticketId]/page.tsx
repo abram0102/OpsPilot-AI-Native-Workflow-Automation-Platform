@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { fetchMe } from "@/lib/api/me";
 import { getTicket, listTicketMessages } from "@/lib/api/tickets";
+import { listRuns } from "@/lib/api/runs";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import ui from "@/styles/ui.module.css";
-import { updateTicketAction, createMessageAction } from "./actions";
+import { updateTicketAction, createMessageAction, startRunAction } from "./actions";
+import { StartRunForm } from "./StartRunForm";
 import { UpdateTicketForm } from "./UpdateTicketForm";
 import { PostMessageForm } from "./PostMessageForm";
 import styles from "./page.module.css";
@@ -37,10 +39,15 @@ export default async function TicketDetailPage({
   }
   const canManage = membership.role !== "VIEWER";
 
-  const [ticket, messages] = await Promise.all([
+  const [ticket, messages, runs] = await Promise.all([
     getTicket(orgId, ticketId),
     listTicketMessages(orgId, ticketId),
+    listRuns(orgId, { ticketId, limit: 5 }),
   ]);
+
+  // Generated per render, not per click: a double-submitted form carries the same key, so the
+  // backend returns the run it already created rather than starting a second one (T18).
+  const startRunKey = crypto.randomUUID();
 
   return (
     <div className={ui.page}>
@@ -128,6 +135,37 @@ export default async function TicketDetailPage({
               <p className={ui.hint}>Viewers cannot change a ticket.</p>
             </div>
           )}
+
+          <section className={ui.card}>
+            <div className={ui.sectionTitle}>
+              <h2 className={ui.cardTitle}>Agent runs</h2>
+            </div>
+
+            {runs.items.length === 0 ? (
+              <p className={ui.hint}>
+                The agent has not been asked to work this ticket. A run drafts a reply and stops for
+                a human decision — it never publishes anything by itself.
+              </p>
+            ) : (
+              <ul className={styles.runList}>
+                {runs.items.map((run) => (
+                  <li key={run.id} className={styles.runItem}>
+                    <Link className={ui.mono} href={`/app/${orgId}/runs/${run.id}`}>
+                      {run.id.slice(0, 8)}
+                    </Link>
+                    <StatusBadge value={run.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {canManage && (
+              <StartRunForm
+                action={startRunAction.bind(null, orgId, ticketId)}
+                idempotencyKey={startRunKey}
+              />
+            )}
+          </section>
         </aside>
       </div>
     </div>

@@ -172,6 +172,7 @@ public class AgentRunService {
       AuthenticatedPrincipal principal,
       UUID organizationId,
       AgentRunStatus status,
+      UUID ticketId,
       String cursor,
       Integer limit) {
     accessService.requireAction(principal, organizationId, OrganizationAction.VIEW_RUNS);
@@ -182,10 +183,12 @@ public class AgentRunService {
 
     List<AgentRun> rows;
     if (cursor == null || cursor.isBlank()) {
-      rows = runs.findFirstPage(organizationId, status, window);
+      rows = runs.findFirstPage(organizationId, status, ticketId, window);
     } else {
       AgentRunCursors.Decoded decoded = AgentRunCursors.decode(cursor);
-      rows = runs.findPageAfter(organizationId, status, decoded.createdAt(), decoded.id(), window);
+      rows =
+          runs.findPageAfter(
+              organizationId, status, ticketId, decoded.createdAt(), decoded.id(), window);
     }
 
     boolean hasMore = rows.size() > pageSize;

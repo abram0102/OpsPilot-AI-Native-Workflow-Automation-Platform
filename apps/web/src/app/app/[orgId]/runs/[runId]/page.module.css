@@ -1,0 +1,132 @@
+.page {
+  composes: page from "../../../../../styles/ui.module.css";
+  max-width: 60rem;
+}
+
+.errorCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--danger-600);
+}
+
+/* --- Approvals panel ------------------------------------------------------ */
+
+.approvalList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.approvalItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.approvalHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.approvalLink {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The same gold edge the ticket thread and the approval page use for text a
+   model wrote. One cue, everywhere it appears. */
+.proposal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- Trace ---------------------------------------------------------------- */
+
+.trace {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  counter-reset: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.sequence {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--brand-700);
+  color: var(--on-brand);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepType {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.01em;
+}
+
+.stepMeta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+}
+
+.stepMeta:empty {
+  display: none;
+}
+
+.payload summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+  width: fit-content;
+}
+
+.payload summary:hover {
+  color: var(--link);
+}
+
+/* Trace payloads are plain text written by a model from untrusted input, so
+   they are shown preformatted and wrapped — never parsed as markup. */
+.pre {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow-y: auto;
+}

@@ -48,15 +48,16 @@ class AgentRunController {
     return ResponseEntity.status(HttpStatus.ACCEPTED).body(StartRunResponse.from(run));
   }
 
-  @Operation(summary = "List agent runs")
+  @Operation(summary = "List agent runs, optionally only one ticket's")
   @GetMapping("/runs")
   AgentRunPageResponse list(
       @PathVariable UUID orgId,
       @RequestParam(required = false) AgentRunStatus status,
+      @RequestParam(required = false) UUID ticketId,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer limit,
       @AuthenticationPrincipal AuthenticatedPrincipal principal) {
-    return runService.list(principal, orgId, status, cursor, limit);
+    return runService.list(principal, orgId, status, ticketId, cursor, limit);
   }
 
   @Operation(summary = "Get one agent run")

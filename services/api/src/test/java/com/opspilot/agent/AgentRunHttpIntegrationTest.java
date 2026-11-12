@@ -288,6 +288,67 @@ class AgentRunHttpIntegrationTest {
   }
 
   @Test
+  void theRunListCanBeNarrowedToOneTicket() throws Exception {
+    // Two tickets in the same tenant, so a ticket filter that silently did nothing would still
+    // return rows and look like it worked.
+    Customer other =
+        customers.saveAndFlush(new Customer(orgId, "Bob", "bob-" + UUID.randomUUID() + "@x.test"));
+    UUID secondTicketId =
+        tickets
+            .saveAndFlush(
+                new Ticket(
+                    orgId,
+                    other.getId(),
+                    "Second ticket",
+                    "Body",
+                    TicketPriority.LOW,
+                    member.getId()))
+            .getId();
+    startRun(member, null);
+    UUID secondRunId = runIdOf(startRunOn(member, orgId, secondTicketId, null));
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/runs", orgId)
+                .param("ticketId", secondTicketId.toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(member)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(1))
+        .andExpect(jsonPath("$.items[0].id").value(secondRunId.toString()))
+        .andExpect(jsonPath("$.items[0].ticketId").value(secondTicketId.toString()));
+  }
+
+  @Test
+  void aTicketFilterFromAnotherOrganizationRevealsNothing() throws Exception {
+    // ticketId is client-supplied and filtered inside the query, alongside organization_id — so
+    // another tenant's ticket yields an empty page rather than that tenant's runs.
+    Customer foreign =
+        customers.saveAndFlush(
+            new Customer(otherOrgId, "Eve", "eve-" + UUID.randomUUID() + "@x.test"));
+    UUID foreignTicketId =
+        tickets
+            .saveAndFlush(
+                new Ticket(
+                    otherOrgId,
+                    foreign.getId(),
+                    "Other tenant's ticket",
+                    "Body",
+                    TicketPriority.LOW,
+                    outsider.getId()))
+            .getId();
+    startRunOn(outsider, otherOrgId, foreignTicketId, null);
+    startRun(member, null);
+
+    mockMvc
+        .perform(
+            get("/api/v1/organizations/{orgId}/runs", orgId)
+                .param("ticketId", foreignTicketId.toString())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(member)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(0));
+  }
+
+  @Test
   void anInvalidCursorIsRejected() throws Exception {
     mockMvc
         .perform(
@@ -405,8 +466,13 @@ class AgentRunHttpIntegrationTest {
   }
 
   private String startRun(User as, String idempotencyKey) throws Exception {
+    return startRunOn(as, orgId, ticketId, idempotencyKey);
+  }
+
+  private String startRunOn(User as, UUID onOrgId, UUID onTicketId, String idempotencyKey)
+      throws Exception {
     var request =
-        post("/api/v1/organizations/{orgId}/tickets/{ticketId}/runs", orgId, ticketId)
+        post("/api/v1/organizations/{orgId}/tickets/{ticketId}/runs", onOrgId, onTicketId)
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(as))
             .contentType(MediaType.APPLICATION_JSON)
             .content(BODY);

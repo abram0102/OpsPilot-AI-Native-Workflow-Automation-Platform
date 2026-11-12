@@ -264,7 +264,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List agent runs */
+        /** List agent runs, optionally only one ticket's */
         get: operations["list_2"];
         put?: never;
         post?: never;
@@ -366,7 +366,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List approvals awaiting a decision */
+        /** List approvals awaiting a decision, or every approval of one run */
         get: operations["list_4"];
         put?: never;
         post?: never;
@@ -1181,6 +1181,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "QUEUED" | "RUNNING" | "AWAITING_APPROVAL" | "RETRY_SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED";
+                ticketId?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -1344,6 +1345,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+                runId?: string;
             };
             header?: never;
             path: {

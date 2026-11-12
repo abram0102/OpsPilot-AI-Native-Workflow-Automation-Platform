@@ -3,11 +3,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { fetchMe } from "@/lib/api/me";
 import { listTickets, type TicketStatus } from "@/lib/api/tickets";
+import { listRuns, type AgentRunStatus } from "@/lib/api/runs";
 import ui from "@/styles/ui.module.css";
 
 export const instant = false;
 
 const STATUSES: TicketStatus[] = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+// The run states worth a tile: what is in flight, what is blocked on a human, and what broke.
+// SUCCEEDED and CANCELLED are deliberately absent — neither is something to act on.
+const RUN_STATUSES: AgentRunStatus[] = ["QUEUED", "RUNNING", "AWAITING_APPROVAL", "FAILED"];
 
 /**
  * Dashboard (T04 placeholder, real counts since T12). docs/PRODUCT_AND_ARCHITECTURE.md section 6:
@@ -49,7 +53,48 @@ export default async function DashboardPage({ params }: PageProps<"/app/[orgId]/
       <Suspense fallback={<p className={ui.lead}>Loading ticket counts…</p>}>
         <TicketCounts orgId={orgId} />
       </Suspense>
+
+      <div className={ui.pageHeaderText}>
+        <h2>Agent runs</h2>
+        <p className={ui.lead}>
+          What the agent is doing right now, and what is waiting on a person.
+        </p>
+      </div>
+
+      <Suspense fallback={<p className={ui.lead}>Loading run counts…</p>}>
+        <RunCounts orgId={orgId} />
+      </Suspense>
     </div>
+  );
+}
+
+/**
+ * Run counts per state. Same honesty rule as the ticket counts above: the API computes no total,
+ * so a bucket at the page limit is shown as "100+" rather than as a number this page has not
+ * actually counted (AGENTS.md rule 6).
+ */
+async function RunCounts({ orgId }: { orgId: string }) {
+  const counts = await Promise.all(
+    RUN_STATUSES.map(async (status) => {
+      const page = await listRuns(orgId, { status, limit: 100 });
+      const count = page.items.length;
+      return { status, label: page.nextCursor ? `${count}+` : String(count) };
+    }),
+  );
+
+  return (
+    <dl className={ui.statGrid}>
+      {counts.map(({ status, label }) => (
+        <div key={status} className={ui.statTile}>
+          <dt className={ui.statLabel}>
+            <Link className={ui.stretchLink} href={`/app/${orgId}/runs?status=${status}`}>
+              {formatStatus(status)}
+            </Link>
+          </dt>
+          <dd className={ui.statValue}>{label}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -78,6 +123,6 @@ async function TicketCounts({ orgId }: { orgId: string }) {
   );
 }
 
-function formatStatus(status: TicketStatus): string {
+function formatStatus(status: TicketStatus | AgentRunStatus): string {
   return status.replaceAll("_", " ");
 }

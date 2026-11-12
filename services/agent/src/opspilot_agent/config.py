@@ -12,14 +12,25 @@ from __future__ import annotations
 from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import SecretStr, model_validator
+from pydantic import BeforeValidator, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AiMode(StrEnum):
     MOCK = "mock"
     REAL = "real"
+
+
+def _empty_string_as_none(value: object) -> object:
+    """An env var set to the empty string means "not set"."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+OptionalDecimal = Annotated[Decimal | None, BeforeValidator(_empty_string_as_none)]
 
 
 class Settings(BaseSettings):
@@ -107,8 +118,13 @@ class Settings(BaseSettings):
     # Cost is only ever computed from rates an operator supplied. Unset means a recorded cost of
     # `null` rather than a guess — T20's acceptance says cost must be "recorded, not made up",
     # and prices change per model, region and account (docs/DECISIONS.md ADR-044).
-    llm_input_cost_per_mtok: Decimal | None = None
-    llm_output_cost_per_mtok: Decimal | None = None
+    #
+    # `OptionalDecimal`, not `Decimal | None`: an environment variable that is PRESENT BUT EMPTY
+    # (`LLM_INPUT_COST_PER_MTOK=`, exactly as .env.example ships it) reaches pydantic as the empty
+    # string, which is not a valid decimal, so the worker refused to start at all. "Set to nothing"
+    # and "not set" mean the same thing for a rate, and both must mean "no rate".
+    llm_input_cost_per_mtok: OptionalDecimal = None
+    llm_output_cost_per_mtok: OptionalDecimal = None
 
     # Two independent locks on paid usage. `AI_MODE=real` alone is not enough: this flag has to
     # be set deliberately, so a stray environment cannot start spending money.

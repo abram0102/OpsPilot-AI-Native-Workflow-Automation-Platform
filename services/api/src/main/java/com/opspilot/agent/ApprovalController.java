@@ -36,13 +36,14 @@ class ApprovalController {
     this.decisionService = decisionService;
   }
 
-  @Operation(summary = "List approvals awaiting a decision")
+  @Operation(summary = "List approvals awaiting a decision, or every approval of one run")
   @GetMapping
   List<ApprovalResponse> list(
       @PathVariable UUID orgId,
       @RequestParam(required = false) ApprovalStatus status,
+      @RequestParam(required = false) UUID runId,
       @AuthenticationPrincipal AuthenticatedPrincipal principal) {
-    return decisionService.list(principal, orgId, status);
+    return decisionService.list(principal, orgId, status, runId);
   }
 
   @Operation(summary = "Get one approval with its exact proposal and evidence")

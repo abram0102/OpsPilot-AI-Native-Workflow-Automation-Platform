@@ -698,7 +698,7 @@
     "/api/v1/organizations/{orgId}/runs" : {
       "get" : {
         "tags" : [ "Agent runs" ],
-        "summary" : "List agent runs",
+        "summary" : "List agent runs, optionally only one ticket's",
         "operationId" : "list_2",
         "parameters" : [ {
           "name" : "orgId",
@@ -715,6 +715,14 @@
           "schema" : {
             "type" : "string",
             "enum" : [ "QUEUED", "RUNNING", "AWAITING_APPROVAL", "RETRY_SCHEDULED", "COMPLETED", "FAILED", "CANCELLED" ]
+          }
+        }, {
+          "name" : "ticketId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
           }
         }, {
           "name" : "cursor",
@@ -960,7 +968,7 @@
     "/api/v1/organizations/{orgId}/approvals" : {
       "get" : {
         "tags" : [ "Approvals" ],
-        "summary" : "List approvals awaiting a decision",
+        "summary" : "List approvals awaiting a decision, or every approval of one run",
         "operationId" : "list_4",
         "parameters" : [ {
           "name" : "orgId",
@@ -977,6 +985,14 @@
           "schema" : {
             "type" : "string",
             "enum" : [ "PENDING", "APPROVED", "REJECTED", "EXPIRED" ]
+          }
+        }, {
+          "name" : "runId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
           }
         } ],
         "responses" : {

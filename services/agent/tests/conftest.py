@@ -32,6 +32,45 @@ MIGRATIONS_DIR = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide the developer's shell from `Settings`.
+
+    `pydantic_settings` reads the real environment for every field a test does not pass
+    explicitly, so running the suite in a shell that has sourced `.env` — which is exactly what
+    `make worker-dev` and `make api-dev` ask you to do — made three tests fail: they assert that
+    real mode WITHOUT a model id is refused, and the shell was supplying one. CI never exports
+    `.env`, so CI stayed green while the suite was broken for anyone running it locally.
+
+    The test-only DSNs are kept: they are read by the fixtures below, not by `Settings`, and
+    clearing them would skip every database- and Redis-backed test. A test that wants a variable
+    sets it with `monkeypatch.setenv`, which runs after this fixture.
+    """
+    keep = {"POSTGRES_TEST_DSN", "REDIS_TEST_URL"}
+    for name in list(os.environ):
+        if name in keep:
+            continue
+        if name.startswith(
+            (
+                "AI_",
+                "LLM_",
+                "AGENT_",
+                "EMBEDDING_",
+                "WORKER_",
+                "REDIS_",
+                "POSTGRES_",
+                "INTERNAL_SERVICE_",
+                "API_",
+                "EVAL_",
+                "ALLOW_REAL_",
+                "RETRIEVAL_",
+                "STORAGE_",
+                "S3_",
+            )
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+
 def _test_dsn() -> str | None:
     return os.environ.get("POSTGRES_TEST_DSN")
 

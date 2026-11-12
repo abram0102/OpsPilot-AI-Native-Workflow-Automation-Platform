@@ -29,9 +29,15 @@ const TONES: Record<string, string | undefined> = {
   QUEUED: ui.badge,
   RUNNING: ui.badgeInfo,
   AWAITING_APPROVAL: ui.badgeWarning,
-  SUCCEEDED: ui.badgeSuccess,
+  RETRY_SCHEDULED: ui.badgeWarning,
+  COMPLETED: ui.badgeSuccess,
   FAILED: ui.badgeDanger,
   CANCELLED: ui.badge,
+
+  // Agent step status (FAILED is shared with the run states above)
+  STARTED: ui.badgeInfo,
+  SUCCEEDED: ui.badgeSuccess,
+  SKIPPED: ui.badge,
 
   // Ticket priority
   LOW: ui.badge,

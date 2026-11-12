@@ -60,16 +60,35 @@ public class ApprovalDecisionService {
     this.objectMapper = objectMapper;
   }
 
+  /**
+   * The inbox, and the run explorer's "what did this run propose" panel (T27).
+   *
+   * <p>{@code runId} deliberately changes the no-status default. The inbox answers "what is waiting
+   * for me", so with no status it shows {@code PENDING}. A run's page answers "what did this run
+   * propose and what happened to it", where an approval that was already approved or rejected is
+   * the most interesting row on the page — defaulting that view to pending only would hide the
+   * decision the run is waiting on having had.
+   *
+   * <p>Both branches scope on {@code organization_id} in the query itself, not after the fact: a
+   * {@code runId} is a client-supplied value, and a run belonging to another tenant must come back
+   * empty rather than be filtered in memory (AGENTS.md invariants).
+   */
   @Transactional(readOnly = true)
   public List<ApprovalResponse> list(
-      AuthenticatedPrincipal principal, UUID organizationId, ApprovalStatus status) {
+      AuthenticatedPrincipal principal, UUID organizationId, ApprovalStatus status, UUID runId) {
     accessService.requireAction(principal, organizationId, OrganizationAction.DECIDE_APPROVAL);
 
-    List<Approval> rows =
-        status == null
-            ? approvals.findAllByOrganizationIdAndStatusOrderByCreatedAt(
-                organizationId, ApprovalStatus.PENDING)
-            : approvals.findAllByOrganizationIdAndStatusOrderByCreatedAt(organizationId, status);
+    List<Approval> rows;
+    if (runId != null) {
+      rows = approvals.findAllByRunIdAndOrganizationIdOrderByCreatedAt(runId, organizationId);
+      if (status != null) {
+        rows = rows.stream().filter(approval -> approval.getStatus() == status).toList();
+      }
+    } else {
+      rows =
+          approvals.findAllByOrganizationIdAndStatusOrderByCreatedAt(
+              organizationId, status == null ? ApprovalStatus.PENDING : status);
+    }
 
     return rows.stream().map(this::toResponse).toList();
   }
