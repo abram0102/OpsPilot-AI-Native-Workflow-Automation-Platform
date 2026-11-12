@@ -33,7 +33,7 @@
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^31.0.0",
     "prettier": "^3.9.10",
-    "typescript": "^5",
+    "typescript": "^6",
     "vitest": "^5.1.0"
   },
   "packageManager": "pnpm@12.16.1"
