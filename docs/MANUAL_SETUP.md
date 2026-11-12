@@ -12,8 +12,9 @@ Most coding work can be automated. These steps require personal account control,
 ## Gate H1 — Auth0 (before real login T08/T10 E2E)
 
 1. Create/authenticate an Auth0 account. Create a development tenant and a **Regular Web Application** (not SPA) for `apps/web`. Create an API resource with audience `https://api.opspilot.local` (or whatever you set `API_OIDC_AUDIENCE`/`AUTH0_AUDIENCE` to — they must match exactly) for Spring Boot access tokens.
-2. In the Application's settings, set **Allowed Callback URLs** to `http://localhost:3000/auth/callback` and **Allowed Logout URLs** to `http://localhost:3000` — the `@auth0/nextjs-auth0` v4 SDK actually installed here drops the `/api` prefix v3 docs still show (confirmed from the SDK's own bundled `node_modules/@auth0/nextjs-auth0/skills/SKILL.md`, not assumed from memory).
-3. Set these exact environment variables locally (`.env`) and in the production secrets manager later — v4's names, not v3's (see `docs/DECISIONS.md`):
+2. **Authorize the Application for that API.** Creating the API resource is not enough — the two are linked separately. In Applications → Applications → your app → **API Access**, authorize `OpsPilot API`. Without it Auth0 refuses the authorization request itself with `invalid_request: Client "<client-id>" is not authorized to access resource server "https://api.opspilot.local".` — the browser lands back on `/auth/callback?error=invalid_request` before any token is ever issued. No scopes need to be selected; the API's authorization rules key off `aud`, not scopes. (Found by walking the flow on 2026-11-11; this step was missing from this document.)
+3. In the Application's settings, set **Allowed Callback URLs** to `http://localhost:3000/auth/callback` and **Allowed Logout URLs** to `http://localhost:3000` — the `@auth0/nextjs-auth0` v4 SDK actually installed here drops the `/api` prefix v3 docs still show (confirmed from the SDK's own bundled `node_modules/@auth0/nextjs-auth0/skills/SKILL.md`, not assumed from memory).
+4. Set these exact environment variables. **The five `AUTH0_*` ones and `APP_BASE_URL` belong in `apps/web/.env.local`, not the repository root `.env`** — Next.js reads `.env*` relative to its own directory, so a root `.env` never reaches the web app (`make api-dev` sources that one for the Java service only). The API's `API_OIDC_ISSUER_URI` goes in the root `.env`, and unlike `AUTH0_DOMAIN` it takes the scheme and a trailing slash. A real deployment puts the same values in its secrets manager instead. These are v4's variable names, not v3's (see `docs/DECISIONS.md`):
    ```
    AUTH0_DOMAIN=your-tenant.auth0.com   # no scheme
    AUTH0_CLIENT_ID=...
@@ -22,7 +23,12 @@ Most coding work can be automated. These steps require personal account control,
    AUTH0_SECRET=$(openssl rand -hex 32)
    APP_BASE_URL=http://localhost:3000
    ```
-4. **Add a Post-Login Action** so the access token Spring Boot actually validates carries a verified email/name — by default Auth0 only puts those on the ID token, which never leaves the Next.js BFF. In the Auth0 Dashboard, add a Post-Login Action (Actions → Flows → Login) with:
+   and in the root `.env`:
+   ```
+   API_OIDC_ISSUER_URI=https://your-tenant.auth0.com/   # scheme AND trailing slash
+   API_OIDC_AUDIENCE=https://api.opspilot.local         # must equal AUTH0_AUDIENCE exactly
+   ```
+5. **Add a Post-Login Action** so the access token Spring Boot actually validates carries a verified email/name — by default Auth0 only puts those on the ID token, which never leaves the Next.js BFF. In the Auth0 Dashboard, add a Post-Login Action (Actions → Library → Create Action, trigger **Login / Post Login**), Deploy it, then bind it under Actions → **Triggers** → Login / Post Login — the dashboard renamed "Flows" to "Triggers", and a DEPLOYED action that is not bound to the trigger never runs:
    ```js
    exports.onExecutePostLogin = async (event, api) => {
      api.accessToken.setCustomClaim("https://opspilot.local/email", event.user.email);
@@ -30,9 +36,9 @@ Most coding work can be automated. These steps require personal account control,
    };
    ```
    Without this, first-login provisioning (`UserProvisioningService`) still works but falls back to a synthetic `sub@users.opspilot.local` placeholder rather than the real email — functional, not fake, but not what you want for a real demo account.
-5. Configure a dedicated test account and later a second account; avoid public real data.
-6. To enable E2E without live Auth0, use a **test-only signed OIDC issuer / token fixture** restricted to test builds, not a dev bypass exposed on production routes — already built in T07/T08 (`TestIssuerConfig`, `TestJwtSigner`), gated by `API_ALLOW_TEST_ISSUER` and refused outright under the `production` profile (`ProductionSafetyGuard`).
-7. User confirms login works; Codex implements integration and tests.
+6. Configure a dedicated test account and later a second account; avoid public real data.
+7. To enable E2E without live Auth0, use a **test-only signed OIDC issuer / token fixture** restricted to test builds, not a dev bypass exposed on production routes — already built in T07/T08 (`TestIssuerConfig`, `TestJwtSigner`), gated by `API_ALLOW_TEST_ISSUER` and refused outright under the `production` profile (`ProductionSafetyGuard`).
+8. User confirms login works; Codex implements integration and tests.
 
 ## Gate H2 — LLM provider (before real AI T20)
 
