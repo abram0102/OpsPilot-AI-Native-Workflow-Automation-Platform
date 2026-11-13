@@ -162,7 +162,7 @@ make check
 | Java | `make test-integration` | Real PostgreSQL via Testcontainers: tenant isolation, state machines, stale writes, replay, idempotency under ten concurrent duplicates |
 | Python | `cd services/agent && uv run pytest` | Graph nodes, checkpoint resume, stream consumer, dead-letter, indexer |
 | Web | `cd apps/web && pnpm test` | Server actions, forms, access-denied rendering |
-| E2E | `make test-e2e` | Playwright over the real stack: login, ticket, agent run, approval, publication, knowledge ingestion, cross-tenant refusal |
+| E2E | `make test-e2e` | Playwright over the real stack: login, ticket, agent run, approval, publication, knowledge ingestion, cross-tenant refusal, and an axe accessibility pass |
 | Security | `make test-security` | Every mapped route enumerated and probed unauthenticated and cross-tenant |
 | Evaluation | `make eval-mock` | 60-case triage dataset, including 10 adversarial |
 
@@ -228,6 +228,7 @@ tests/e2e/          Playwright suite, including the screenshot capture
 | [`docs/FAILURE_DRILLS.md`](docs/FAILURE_DRILLS.md) | What happened when dependencies were killed |
 | [`benchmarks/2026-11-13-report.md`](benchmarks/2026-11-13-report.md) | Load test, query plans and their limits |
 | [`infra/aws/README.md`](infra/aws/README.md) | The AWS deployment and its gate — never applied |
+| [`docs/RELEASE_REPORT.md`](docs/RELEASE_REPORT.md) | Final audit: per-criterion verdicts, known issues by severity, 30-day plan |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Architecture decision records |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Per-ticket status and evidence (source of truth) |
 

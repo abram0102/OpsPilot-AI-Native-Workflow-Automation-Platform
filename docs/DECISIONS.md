@@ -1171,3 +1171,55 @@ their own and in the résumé bullets' "what is deliberately absent" note. The r
 only figures that exist in a file in this repository — latency, throughput, the query-plan
 multiples, the evaluation counts, the drill outcomes — and name no users, uptime, availability or
 cost saving, because there are none to name.
+
+---
+
+## ADR-061 — T36: auditing by running things, and the one finding that was a hair wide
+
+**Context.** T36 is the final audit: full test matrix, credential check, dependency and security
+backlog, UX/a11y smoke, clean-checkout smoke, and a release report with per-criterion verdicts.
+Its acceptance ends with an instruction that shapes the whole ticket — "never state 'production
+ready' if security, E2E or backup gate is incomplete". The backup gate *is* incomplete, so the
+report opens by saying so rather than burying it in a limitations section at the end.
+
+**Decision 1 — the clean-checkout smoke is an actual clean checkout.** Not a `git stash` and not
+a careful reading of the README. The pushed commit was cloned into an empty directory outside the
+working tree, given only a `.env`, and told to bring the stack up. It did: Maven fetched its own
+dependencies, pnpm installed itself without being asked, Flyway migrated an empty database, the
+seeder created both tenants, Next.js built, and 9 of 9 end-to-end tests passed. T35 claimed a
+third party could do this; this is the first time anyone checked, and the claim survived.
+
+The part it cannot check is the `make infra-up` Docker path, since there is no Docker here. That
+is recorded as an untested path rather than quietly folded into the pass.
+
+**Decision 2 — the accessibility check gates on `critical` and `serious`, and ships offline.**
+axe-core is injected from `node_modules`, not a CDN, because CI has no network and a test that
+needs the internet fails for reasons unrelated to the code. `moderate` and `minor` findings are
+printed but do not fail the build: a smoke test that goes red over a best-practice advisory gets
+disabled within a month, and then nothing is checked at all. The version is pinned exactly,
+because axe adds rules in minor releases and a new rule would otherwise turn a build red with no
+commit behind it.
+
+**What the audit found.** One real accessibility defect: the table column headers rendered
+`--muted` on `--surface-sunken` at **4.484:1**, against the 4.5:1 WCAG AA requires for normal
+text. Failing by sixteen thousandths is still failing, and the fix is a token, not an exemption —
+`--muted` darkened to `#55686f`, measured at 5.10:1 on the sunken surface and 5.78:1 on the card
+surface, with dark mode already clear at 7.31:1. Re-run: no violations at any impact level.
+
+Two things follow from how small that was. First, it is exactly the kind of thing nobody finds by
+looking, which is the argument for running a rules engine at all. Second, the committed
+screenshots had to be regenerated, because they were taken with the old token — which is the
+screenshot-as-test design from ADR-060 doing its job in the other direction: the images are
+downstream of the code, so changing the code invalidates them visibly.
+
+**Decision 3 — the report grades itself per criterion, including the ones that fail.** Eleven
+Definition-of-Done clauses, each with a verdict and a link. Nine pass. Clause 3 (real-mode smoke)
+and clause 7 (deployment) are marked PARTIAL and NOT EXECUTED against gates that need money and a
+cloud account — not against the code, and the distinction is stated rather than smudged. The
+non-blocking issues carry severities, and the two High ones are named plainly: backup/restore has
+never been executed, and Dependabot #4 would break the worker if merged.
+
+**What is deliberately not done here.** No release tag: AGENTS.md makes tagging a human gate, and
+the report says what a tag message should admit when one is cut. No cloud billing inspection,
+because there is no cloud account and therefore nothing to inspect — recorded as "not applicable
+and why" rather than as a pass.

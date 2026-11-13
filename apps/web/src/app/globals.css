@@ -56,7 +56,10 @@
   --border: #dde2e2;
   --border-strong: #c3cccd;
   --foreground: #11262d;
-  --muted: #5c7178;
+  /* Darkened at T36 after an axe run: #5c7178 on --surface-sunken measured 4.484:1, just under
+     the 4.5:1 WCAG AA needs for normal text, and the table headers that use both sit exactly
+     there. This value measures 5.10:1 on sunken and 5.78:1 on --surface. */
+  --muted: #55686f;
   --on-brand: #f4f9fa;
   --on-brand-muted: #a9c7cf;
 

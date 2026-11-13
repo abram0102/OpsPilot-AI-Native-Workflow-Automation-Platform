@@ -17,6 +17,9 @@ importers:
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
+      axe-core:
+        specifier: 4.12.1
+        version: 4.12.1
       jose:
         specifier: 6.2.17
         version: 6.2.17
@@ -270,6 +273,10 @@ packages:
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  axe-core@4.12.1:
+    resolution: {integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==}
+    engines: {node: '>=4'}
 
   baseline-browser-mapping@2.11.36:
     resolution: {integrity: sha512-AbPFGS4K9S3meMRCLTM0Zas+e9X7b5ygUBOboDT5zevCZt9ByKSbMtKhwyVqW+oL8WemPVsbP7X3rdZcIyOa0w==}
@@ -573,6 +580,8 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
+
+  axe-core@4.12.1: {}
 
   baseline-browser-mapping@2.11.36: {}
 
