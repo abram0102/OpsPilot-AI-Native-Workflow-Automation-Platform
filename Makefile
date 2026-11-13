@@ -105,6 +105,11 @@ lint: ## Run all linters across web/api/agent/e2e — T05, T29
 	# The E2E package has no runtime of its own to lint, but it does have types — and a selector
 	# typo there only shows up minutes into a stack run, which is the worst place to find one.
 	cd tests/e2e && $(NVM_USE) pnpm typecheck
+	# Workflows are code too, and the failure mode is a push that breaks CI for everyone.
+	# actionlint type-checks expressions, validates the schema, and runs shellcheck over every
+	# `run:` block — it caught a real issue in the deploy workflow on its first run.
+	@command -v actionlint >/dev/null 2>&1 && actionlint || \
+		echo "note: actionlint is not installed (brew install actionlint), skipping workflow lint." >&2
 
 # Surefire needs `!` on *each* comma-separated name to exclude all of them
 # (a bare name after a comma is a separate positive-include filter, not a

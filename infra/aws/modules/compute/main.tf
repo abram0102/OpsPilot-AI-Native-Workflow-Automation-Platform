@@ -17,12 +17,26 @@ terraform {
 locals {
   api_container    = "api"
   worker_container = "worker"
+  web_container    = "web"
 }
 
 # --- registries -----------------------------------------------------------------------------
 
 resource "aws_ecr_repository" "api" {
   name                 = "${var.name_prefix}/api"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+}
+
+resource "aws_ecr_repository" "web" {
+  name                 = "${var.name_prefix}/web"
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -58,6 +72,11 @@ resource "aws_ecr_lifecycle_policy" "api" {
 
 resource "aws_ecr_lifecycle_policy" "worker" {
   repository = aws_ecr_repository.worker.name
+  policy     = local.ecr_lifecycle_policy
+}
+
+resource "aws_ecr_lifecycle_policy" "web" {
+  repository = aws_ecr_repository.web.name
   policy     = local.ecr_lifecycle_policy
 }
 
@@ -126,6 +145,11 @@ resource "aws_cloudwatch_log_group" "worker" {
   retention_in_days = var.log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "web" {
+  name              = "/opspilot/${var.environment}/web"
+  retention_in_days = var.log_retention_days
+}
+
 # --- the tasks' shared security group ------------------------------------------------------------
 
 resource "aws_security_group" "tasks" {
@@ -136,11 +160,21 @@ resource "aws_security_group" "tasks" {
   tags = { Name = "${var.name_prefix}-tasks" }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "tasks_from_alb" {
+resource "aws_vpc_security_group_ingress_rule" "web_from_public_alb" {
   security_group_id = aws_security_group.tasks.id
-  description       = "API port from the load balancer only"
+  description       = "Web port from the public load balancer only"
 
   referenced_security_group_id = var.alb_security_group_id
+  from_port                    = var.web_port
+  to_port                      = var.web_port
+  ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "api_from_internal_alb" {
+  security_group_id = aws_security_group.tasks.id
+  description       = "API port from the internal load balancer only — never from the public one"
+
+  referenced_security_group_id = var.internal_alb_security_group_id
   from_port                    = var.api_port
   to_port                      = var.api_port
   ip_protocol                  = "tcp"
@@ -263,7 +297,7 @@ resource "aws_ecs_task_definition" "worker" {
       # No portMappings. Nothing connects to the worker; it consumes a stream and calls the
       # internal API outbound.
       environment = concat(local.common_environment, [
-        { name = "API_BASE_URL", value = "http://${var.api_internal_host}:${var.api_port}" },
+        { name = "API_BASE_URL", value = var.internal_api_base_url },
       ])
       secrets = local.common_secrets
 
@@ -341,4 +375,106 @@ resource "aws_ecs_service" "worker" {
   lifecycle {
     ignore_changes = [task_definition, desired_count]
   }
+}
+
+
+# --- web ----------------------------------------------------------------------------------------
+#
+# The public face. It holds the Auth0 session (the browser never sees an access token) and calls
+# the API over the internal load balancer, which never leaves the VPC.
+
+resource "aws_ecs_task_definition" "web" {
+  family                   = "${var.name_prefix}-web"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.web_cpu
+  memory                   = var.web_memory_mb
+  execution_role_arn       = var.execution_role_arn
+  # No task role: the web service calls the API over HTTP with the user's own token and touches
+  # no AWS resource directly. A role with no policies would still be a role somebody could
+  # attach a policy to later.
+  task_role_arn = null
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
+  container_definitions = jsonencode([
+    {
+      name      = local.web_container
+      image     = "${aws_ecr_repository.web.repository_url}:${var.web_image_tag}"
+      essential = true
+
+      portMappings = [{ containerPort = var.web_port, protocol = "tcp" }]
+
+      environment = [
+        { name = "NODE_ENV", value = "production" },
+        { name = "PORT", value = tostring(var.web_port) },
+        { name = "HOSTNAME", value = "0.0.0.0" },
+        { name = "APP_BASE_URL", value = var.public_base_url },
+        { name = "AUTH0_DOMAIN", value = var.auth0_domain },
+        { name = "AUTH0_CLIENT_ID", value = var.auth0_client_id },
+        { name = "AUTH0_AUDIENCE", value = var.oidc_audience },
+        # Server-side only. The browser never calls the API directly — every request goes through
+        # the BFF — so this is an internal hostname and is deliberately not NEXT_PUBLIC_*.
+        { name = "API_BASE_URL", value = var.internal_api_base_url },
+      ]
+
+      secrets = [
+        { name = "AUTH0_CLIENT_SECRET", valueFrom = var.auth0_client_secret_arn },
+        { name = "AUTH0_SECRET", valueFrom = var.web_session_secret_arn },
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.web.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "web"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:${var.web_port}/sign-in').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 30
+      }
+    },
+  ])
+}
+
+resource "aws_ecs_service" "web" {
+  name            = "${var.name_prefix}-web"
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.web.arn
+  desired_count   = var.web_desired_count
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = var.web_target_group_arn
+    container_name   = local.web_container
+    container_port   = var.web_port
+  }
+
+  health_check_grace_period_seconds = 60
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+
+  depends_on = [var.alb_listener_dependency]
 }

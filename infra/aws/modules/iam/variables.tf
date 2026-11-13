@@ -45,3 +45,8 @@ variable "existing_github_oidc_provider_arn" {
   type        = string
   default     = ""
 }
+
+variable "ecs_cluster_arn" {
+  description = "Cluster the deploy role may run the migration task in. Conditions RunTask so it cannot run a task anywhere else."
+  type        = string
+}

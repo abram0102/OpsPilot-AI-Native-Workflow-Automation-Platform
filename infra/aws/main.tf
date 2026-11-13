@@ -27,13 +27,14 @@ module "storage" {
 module "edge" {
   source = "./modules/edge"
 
-  name_prefix       = local.name_prefix
-  vpc_id            = module.network.vpc_id
-  vpc_cidr          = module.network.vpc_cidr
-  public_subnet_ids = module.network.public_subnet_ids
-  ingress_cidrs     = var.alb_ingress_cidrs
-  domain_name       = var.domain_name
-  route53_zone_id   = var.route53_zone_id
+  name_prefix        = local.name_prefix
+  vpc_id             = module.network.vpc_id
+  vpc_cidr           = module.network.vpc_cidr
+  public_subnet_ids  = module.network.public_subnet_ids
+  private_subnet_ids = module.network.private_subnet_ids
+  ingress_cidrs      = var.alb_ingress_cidrs
+  domain_name        = var.domain_name
+  route53_zone_id    = var.route53_zone_id
 }
 
 module "data" {
@@ -80,7 +81,8 @@ module "iam" {
   documents_bucket_arn = module.storage.bucket_arn
   secret_arns          = module.secrets.all_secret_arns
   ecr_repository_arns  = module.compute.ecr_repository_arns
-  ecs_service_arns     = [module.compute.api_service_arn, module.compute.worker_service_arn]
+  ecs_service_arns     = [module.compute.api_service_arn, module.compute.worker_service_arn, module.compute.web_service_arn]
+  ecs_cluster_arn      = module.compute.cluster_arn
   github_repository    = var.github_repository
   github_deploy_ref    = var.github_deploy_ref
 }
@@ -94,10 +96,22 @@ module "compute" {
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
 
-  alb_security_group_id   = module.edge.alb_security_group_id
-  api_target_group_arn    = module.edge.api_target_group_arn
-  api_internal_host       = module.edge.alb_dns_name
-  alb_listener_dependency = module.edge.listener_dependency
+  alb_security_group_id          = module.edge.alb_security_group_id
+  internal_alb_security_group_id = module.edge.internal_alb_security_group_id
+  api_target_group_arn           = module.edge.api_target_group_arn
+  web_target_group_arn           = module.edge.web_target_group_arn
+  internal_api_base_url          = module.edge.internal_api_base_url
+  public_base_url                = module.edge.public_url
+  alb_listener_dependency        = module.edge.listener_dependency
+
+  web_cpu           = var.web_cpu
+  web_memory_mb     = var.web_memory_mb
+  web_desired_count = var.web_desired_count
+
+  auth0_domain            = var.auth0_domain
+  auth0_client_id         = var.auth0_client_id
+  auth0_client_secret_arn = module.secrets.operator_supplied_secret_arns["auth0-client-secret"]
+  web_session_secret_arn  = module.secrets.web_session_secret_arn
 
   api_cpu              = var.api_cpu
   api_memory_mb        = var.api_memory_mb

@@ -18,6 +18,11 @@ output "operator_supplied_secret_arns" {
   value       = { for name, secret in aws_secretsmanager_secret.operator_supplied : name => secret.arn }
 }
 
+output "web_session_secret_arn" {
+  description = "AUTH0_SECRET for the web task."
+  value       = aws_secretsmanager_secret.web_session.arn
+}
+
 output "all_secret_arns" {
   description = "Everything the task roles need read access to — so the IAM policy lists exactly these and not a wildcard."
   value = concat(
@@ -25,6 +30,7 @@ output "all_secret_arns" {
       aws_secretsmanager_secret.database.arn,
       aws_secretsmanager_secret.redis.arn,
       aws_secretsmanager_secret.internal_service.arn,
+      aws_secretsmanager_secret.web_session.arn,
     ],
     [for secret in aws_secretsmanager_secret.operator_supplied : secret.arn],
   )

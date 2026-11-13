@@ -213,19 +213,44 @@ data "aws_iam_policy_document" "deploy" {
     resources = ["*"]
   }
 
+  # Split into three statements rather than one. The first draft was a single statement whose
+  # resources were `concat(var.ecs_service_arns, ["*"])` — which is a wildcard: adding "*" to a
+  # list does not narrow anything, it widens the whole statement to every resource. It read as
+  # scoped and was not, which is the worst kind of IAM policy.
   statement {
-    sid = "RollServices"
+    sid = "RollTheseServicesOnly"
     actions = [
       "ecs:UpdateService",
       "ecs:DescribeServices",
-      "ecs:DescribeTaskDefinition",
+    ]
+    resources = var.ecs_service_arns
+  }
+
+  statement {
+    sid = "RunTheMigrationTask"
+    # The deploy workflow runs Flyway as a one-off task before any service rolls
+    # (docs/DEPLOYMENT_RUNBOOK.md §2). Scoped to this environment's task-definition families, so
+    # the role cannot run an arbitrary task in the account.
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:${local.partition}:ecs:*:${local.account_id}:task-definition/${var.name_prefix}-*:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [var.ecs_cluster_arn]
+    }
+  }
+
+  statement {
+    sid = "ReadAndRegisterDefinitions"
+    actions = [
+      # Genuinely unscopable: a task definition family that does not exist yet has no ARN to
+      # name, and the rest are read-only describes used to find what is currently deployed.
       "ecs:RegisterTaskDefinition",
+      "ecs:DescribeTaskDefinition",
       "ecs:ListTasks",
       "ecs:DescribeTasks",
     ]
-    # RegisterTaskDefinition cannot be resource-scoped to a family that does not exist yet; the
-    # others are scoped by the service ARNs the caller passes in.
-    resources = concat(var.ecs_service_arns, ["*"])
+    resources = ["*"]
   }
 
   statement {

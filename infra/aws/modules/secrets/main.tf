@@ -114,3 +114,24 @@ resource "aws_secretsmanager_secret_version" "operator_supplied_placeholder" {
     ignore_changes = [secret_string]
   }
 }
+
+
+# The key the Next.js session cookie is encrypted with (AUTH0_SECRET). Generated rather than
+# operator-supplied: it is not an Auth0 credential, it is a local encryption key, and the only
+# requirement is that it be random and stable. A human copying one in by hand is a worse
+# version of this.
+resource "random_password" "web_session" {
+  length  = 64
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "web_session" {
+  name                    = "${var.name_prefix}/web-session"
+  description             = "AUTH0_SECRET — the key the Next.js session cookie is encrypted with."
+  recovery_window_in_days = local.recovery_days
+}
+
+resource "aws_secretsmanager_secret_version" "web_session" {
+  secret_id     = aws_secretsmanager_secret.web_session.id
+  secret_string = random_password.web_session.result
+}

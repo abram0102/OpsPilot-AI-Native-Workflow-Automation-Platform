@@ -1,0 +1,222 @@
+name: Deploy to staging
+
+# docs/TASKS.md T32. **Human gate H3** (docs/MANUAL_SETUP.md): this workflow cannot run until an
+# AWS account exists, the infrastructure in infra/aws/ has been applied, and the `staging`
+# environment has been created in this repository's settings with a required reviewer.
+#
+# It has never run. Everything below is written against infrastructure that does not yet exist,
+# and the first real run will find something — most likely a name or an ARN that differs from
+# what T31 produces.
+#
+# Three properties it is built around:
+#
+#   1. **No long-lived credentials.** OIDC only. There is no AWS access key in this repository's
+#      secrets and nothing here would use one.
+#   2. **Migrations finish before anything rolls.** docs/DEPLOYMENT_RUNBOOK.md §2: "migration
+#      runs as separate controlled job ... before application rollout; don't run many service
+#      replicas racing schema changes."
+#   3. **A failed rollout fails the workflow.** `aws ecs wait services-stable` returns non-zero
+#      on a failed deployment, and the circuit breaker in the service definition rolls it back.
+#      The acceptance criterion is literally "rollout failures do not silently mark success".
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Commit SHA to deploy. Must already exist in ECR — this workflow deploys, it does not build."
+        required: true
+        type: string
+
+# Deliberately not `on: push`. A deploy is a decision. The protected environment below adds a
+# required reviewer on top, so even a dispatch waits for a human.
+permissions:
+  # The only two this needs. `id-token` is what makes OIDC work; `contents` is the checkout.
+  id-token: write
+  contents: read
+
+concurrency:
+  # Never two deploys at once: the second would roll a service the first is still waiting on.
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  CLUSTER: opspilot-staging
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+
+jobs:
+  migrate:
+    name: Database migration
+    runs-on: ubuntu-latest
+    # A GitHub environment with a required reviewer. This is the gate: the job waits here until
+    # a human approves, and nothing below it runs first.
+    environment: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # Short-lived by construction, and named so CloudTrail shows which run did what.
+          role-session-name: opspilot-deploy-${{ github.run_id }}
+
+      - name: Run Flyway as a one-off task, and wait for it
+        # The API image contains the migrations and Spring Boot can run them without serving. A
+        # separate one-off task rather than letting the service migrate on boot: with more than
+        # one replica, boot-time migration means replicas racing each other on the schema.
+        #
+        # `--started-by` makes the task findable in the console next to this run.
+        run: |
+          set -euo pipefail
+
+          task_arn="$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "${CLUSTER}-api" \
+            --launch-type FARGATE \
+            --started-by "gha-${{ github.run_id }}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.PRIVATE_SUBNET_IDS }}],securityGroups=[${{ vars.TASKS_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","command":["java","org.springframework.boot.loader.launch.JarLauncher","--spring.flyway.enabled=true","--spring.main.web-application-type=none"]}]}' \
+            --query 'tasks[0].taskArn' --output text)"
+
+          echo "Migration task: $task_arn"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task_arn"
+
+          exit_code="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+            --query 'tasks[0].containers[0].exitCode' --output text)"
+          reason="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" \
+            --query 'tasks[0].stoppedReason' --output text)"
+
+          echo "Exit code: $exit_code ($reason)"
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::The migration task exited $exit_code. Nothing has been deployed."
+            echo "Check the logs: aws logs tail /opspilot/staging/api --since 15m"
+            exit 1
+          fi
+
+  deploy:
+    name: Roll the services
+    runs-on: ubuntu-latest
+    needs: migrate
+    environment: staging
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: opspilot-deploy-${{ github.run_id }}
+
+      - name: Record what is running now, so a rollback has something to go back to
+        id: current
+        run: |
+          set -euo pipefail
+          for service in api worker web; do
+            arn="$(aws ecs describe-services --cluster "$CLUSTER" --services "${CLUSTER}-${service}" \
+              --query 'services[0].taskDefinition' --output text)"
+            echo "${service}_previous=$arn" >> "$GITHUB_OUTPUT"
+            echo "$service is currently on $arn"
+          done
+
+      - name: Point each task definition at the new image
+        id: register
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.image_tag }}"
+
+          for service in api worker web; do
+            family="${CLUSTER}-${service}"
+            # Take the live definition, swap only the image, register the result. Editing the
+            # live JSON rather than rendering a fresh one keeps every other field — secrets,
+            # roles, log configuration — exactly as OpenTofu created it.
+            aws ecs describe-task-definition --task-definition "$family" --query 'taskDefinition' \
+              > "/tmp/${service}.json"
+
+            jq --arg image "${ECR_REGISTRY}/opspilot-staging/${service}:${tag}" '
+              .containerDefinitions[0].image = $image
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                    .compatibilities, .registeredAt, .registeredBy)
+            ' "/tmp/${service}.json" > "/tmp/${service}-new.json"
+
+            new_arn="$(aws ecs register-task-definition \
+              --cli-input-json "file:///tmp/${service}-new.json" \
+              --query 'taskDefinition.taskDefinitionArn' --output text)"
+            echo "${service}: registered $new_arn"
+            echo "${service}_new=$new_arn" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Roll the services and wait for them to stabilise
+        run: |
+          set -euo pipefail
+
+          # The API first: the web app depends on it, and the worker talks to it. Rolling web
+          # before the API is ready would serve users an application whose backend is mid-deploy.
+          # Each service gets *its own* new definition. The first version of this loop used the
+          # API's for all three, which would have deployed the API image as the worker and the
+          # web app — an error the workflow would have reported as a successful deploy.
+          declare -A new_definitions=(
+            [api]="${{ steps.register.outputs.api_new }}"
+            [worker]="${{ steps.register.outputs.worker_new }}"
+            [web]="${{ steps.register.outputs.web_new }}"
+          )
+
+          for service in api worker web; do
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service "${CLUSTER}-${service}" \
+              --task-definition "${new_definitions[$service]}" \
+              --force-new-deployment >/dev/null
+          done
+
+          # This is the step the acceptance criterion is about. `wait services-stable` polls
+          # until every service reaches a steady state and **returns non-zero if one does not**,
+          # so a failed rollout fails the workflow instead of finishing green while the circuit
+          # breaker quietly rolls back behind it.
+          if ! aws ecs wait services-stable --cluster "$CLUSTER" \
+            --services "${CLUSTER}-api" "${CLUSTER}-worker" "${CLUSTER}-web"; then
+            echo "::error::One or more services did not stabilise. The deployment circuit breaker will have rolled them back; see the rollback note below to confirm or force it."
+            exit 1
+          fi
+
+      - name: Smoke check
+        run: |
+          set -euo pipefail
+          url="${{ vars.PUBLIC_BASE_URL }}/sign-in"
+
+          # A deploy that stabilised but serves errors is still a failed deploy. Retried a few
+          # times because a target group takes a moment to mark the new tasks healthy.
+          for attempt in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)"
+            if [ "$code" = "200" ]; then
+              echo "Smoke check passed ($url -> $code)."
+              exit 0
+            fi
+            echo "Attempt $attempt: $url -> $code"
+            sleep 10
+          done
+          echo "::error::The deployment stabilised but $url never returned 200."
+          exit 1
+
+      - name: How to roll back
+        if: failure()
+        run: |
+          {
+            echo "## Rollback"
+            echo ""
+            echo "The circuit breaker rolls back a service that never stabilises. If a service"
+            echo "stabilised but is wrong, put it back on its previous task definition:"
+            echo ""
+            echo '```bash'
+            echo "aws ecs update-service --cluster $CLUSTER --service ${CLUSTER}-api \\"
+            echo "  --task-definition ${{ steps.current.outputs.api_previous }} --force-new-deployment"
+            echo "aws ecs update-service --cluster $CLUSTER --service ${CLUSTER}-worker \\"
+            echo "  --task-definition ${{ steps.current.outputs.worker_previous }} --force-new-deployment"
+            echo "aws ecs update-service --cluster $CLUSTER --service ${CLUSTER}-web \\"
+            echo "  --task-definition ${{ steps.current.outputs.web_previous }} --force-new-deployment"
+            echo '```'
+            echo ""
+            echo "**A rollback does not undo a migration.** Flyway ran before anything rolled."
+            echo "If the schema change is not backward compatible, the previous image may not run"
+            echo "against it — restoring the RDS snapshot is a human decision with its own"
+            echo "approval (docs/DEPLOYMENT_RUNBOOK.md §6)."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -30,8 +30,8 @@ infra/aws/
     network/   VPC, public subnets (ALB only), private subnets, NAT, S3 gateway endpoint
     data/      RDS PostgreSQL 16 + pgvector precondition, ElastiCache Valkey
     storage/   S3: block-public-access, SSE, versioning, lifecycle, TLS-only policy
-    compute/   ECR, ECS cluster, Fargate task definitions and services, log groups
-    edge/      ALB, ACM certificate, HTTPS listener, HTTP→HTTPS redirect
+    compute/   ECR, ECS cluster, Fargate task definitions and services (web, api, worker)
+    edge/      Public ALB + ACM + HTTPS; internal ALB for the API
     iam/       Task roles, execution role, GitHub OIDC deploy role
     secrets/   Secrets Manager entries, generated and operator-supplied
 ```
@@ -99,7 +99,7 @@ bill, ranked, so you can price it yourself in the AWS Pricing Calculator.
 |---|---|---|---|
 | 1 | **NAT gateway** | Billed hourly *and* per GB, whether or not anything flows. The single largest fixed cost at this size. | `single_nat_gateway = true` (default) uses one instead of one per AZ. The S3 gateway endpoint already keeps document traffic off it entirely. |
 | 2 | **RDS instance** | Hourly, 24/7. Storage and backups on top. | `db_instance_class`; `multi_az` is off for staging and roughly doubles it |
-| 3 | **ALB** | Hourly plus capacity units. | None, short of not having one |
+| 3 | **ALBs (two)** | Hourly plus capacity units, each. A public one for the web app and an internal one for the API. | ECS Service Connect would remove the internal one — see Known gaps |
 | 4 | **ElastiCache node** | Hourly, 24/7. | `redis_node_type`; `replica_count = 0` in staging |
 | 5 | **Fargate tasks** | Per vCPU-second and GB-second while running. | `*_cpu`, `*_memory_mb`, `*_desired_count` — all at their minimum |
 | 6 | CloudWatch, ECR, Secrets Manager, S3 | Per GB and per secret. Small at this size. | `log_retention_days`, the ECR lifecycle policy |
@@ -113,6 +113,24 @@ all bill by the hour whether or not anyone uses the environment. `tofu destroy` 
 is a legitimate way to run this, which is why `db_deletion_protection` exists to stop you doing
 it by accident to something you meant to keep.
 
+## The request path
+
+```
+Internet ──HTTPS──▶ public ALB ──▶ web (Next.js, private subnet)
+                                     │  holds the Auth0 session; the browser never sees a token
+                                     ▼
+                              internal ALB ──▶ api (Spring, private subnet)
+                                                 ▲
+                              worker (private) ──┘  consumes Redis Streams, calls /internal/v1
+```
+
+T31's first draft pointed the public ALB straight at the API and never deployed the web app at
+all — which both exposed the API and left the UI undeployable. Corrected in T32; the shape above
+is the one `docs/DEPLOYMENT_RUNBOOK.md` §4 describes.
+
+The API has no public address. The internal ALB is `internal = true` and sits in the private
+subnets, and the API tasks accept traffic only from its security group.
+
 ## Security properties, and where each is enforced
 
 | Property | Where |
@@ -122,6 +140,8 @@ it by accident to something you meant to keep.
 | HTTPS on the public path | `edge` — HTTP redirects to HTTPS once a domain is set; TLS 1.2 minimum |
 | No wildcard admin role | `iam` — every mutating action names its resources. The two `"*"` resources are `ecr:GetAuthorizationToken` and `ecs:RegisterTaskDefinition`, which AWS does not let you scope; both are annotated |
 | Deploy role cannot escalate | `iam:PassRole` is restricted to the three task roles. Without that, anything that can register a task definition can attach an administrator role to a container |
+| Deploy role is actually scoped | `UpdateService` names the three services; `RunTask` is scoped to this environment's task families and conditioned on this cluster. An earlier draft wrote `concat(service_arns, ["*"])`, which *reads* as scoped and is a wildcard — adding `"*"` to a list widens the statement to everything |
+| API not publicly reachable | Internal ALB, private subnets, and a task security group that admits only the internal ALB's group |
 | Deploy role is not a shared key | GitHub OIDC, with `sub` pinned to one repository **and** one ref — not `repo:owner/name:*`, which any pull request could match |
 | Secrets not in source or images | `secrets` generates what it can and creates never-overwritten slots for what it cannot. Tasks receive them through ECS `secrets`, so they appear in no task definition |
 | S3 private | Four public-access blocks, SSE, and a bucket policy denying non-TLS requests |
@@ -133,9 +153,12 @@ it by accident to something you meant to keep.
   function. The first real apply will find something, and the pgvector precondition is a guess at
   which something.
 - **No WAF.** An ALB without a WAF is fine for staging and is a production conversation.
-- **The worker reaches the API through the ALB.** It is inside the VPC so the traffic does not
-  leave it, but a service-discovery name would be more direct. ECS Service Connect is the better
-  answer and is deferred.
+- **Two load balancers.** The internal one exists so the API is private while still being
+  reachable by name. ECS Service Connect would do the same job without a second ALB's hourly
+  charge — a real saving in a stack whose cost is dominated by hourly resources. It is deferred
+  deliberately: the internal ALB reuses target-group machinery already written here, whereas
+  Service Connect would be configuration written blind against an account nobody has run this
+  on. Revisit once staging has been seen working.
 - **No alarms.** `docs/OBSERVABILITY.md` names the thresholds; turning them into CloudWatch alarms
   is not done here, because an alarm with nothing behind it is worse than none.
 - **Staging only.** `environment = "production"` is modelled (multi-AZ, a Redis replica) but

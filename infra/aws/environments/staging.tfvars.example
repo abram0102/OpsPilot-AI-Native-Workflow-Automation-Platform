@@ -8,9 +8,13 @@
 environment = "staging"
 region      = "us-east-1"
 
-# Your Auth0 tenant, with scheme and trailing slash (docs/MANUAL_SETUP.md Gate H1).
+# Your Auth0 tenant (docs/MANUAL_SETUP.md Gate H1). None of these is a secret: the issuer and
+# audience appear in every token, and the client id appears in every browser redirect. The client
+# *secret* is an empty Secrets Manager slot you fill in the console — it never comes through here.
 oidc_issuer_uri = "https://dev-xxxxxxxx.us.auth0.com/"
 oidc_audience   = "https://api.opspilot.local"
+auth0_domain    = "dev-xxxxxxxx.us.auth0.com"
+auth0_client_id = "replace-with-your-application-client-id"
 
 # --- while bringing staging up -------------------------------------------------------------
 #
@@ -35,8 +39,11 @@ db_instance_class       = "db.t4g.micro"
 redis_node_type         = "cache.t4g.micro"
 api_desired_count       = 1
 worker_desired_count    = 1
+web_desired_count       = 1
 api_cpu                 = 512
 api_memory_mb           = 1024
 worker_cpu              = 256
 worker_memory_mb        = 512
+web_cpu                 = 256
+web_memory_mb           = 512
 log_retention_days      = 30

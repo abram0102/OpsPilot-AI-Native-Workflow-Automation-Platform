@@ -1,0 +1,96 @@
+name: Build and push images
+
+# docs/TASKS.md T32. **Human gate H3**: this cannot run until the ECR repositories exist and the
+# GitHub OIDC role from infra/aws/modules/iam has been created. It has never run.
+#
+# Separate from deploy-staging.yml on purpose. Building an image is safe and repeatable; rolling
+# it out is a decision with a required reviewer. Keeping them apart means the image for a commit
+# can exist, be scanned and be inspected well before anyone chooses to deploy it — and means a
+# rollback has something to roll back *to*.
+#
+# CI's `images` job already builds all three on every pull request. That job proves the
+# Dockerfiles are correct; this one produces the artifacts that ship.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  build:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    # Not a protected environment. Pushing an image changes nothing that serves traffic; the
+    # reviewer gate belongs on the deploy, where it is.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: services/api
+            dockerfile: services/api/Dockerfile
+          - service: worker
+            context: services/agent
+            dockerfile: services/agent/Dockerfile
+          # Root context: the web app imports the generated client from packages/contracts,
+          # which Docker cannot reach from a narrower context.
+          - service: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: opspilot-build-${{ github.run_id }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          # arm64 only, matching `cpu_architecture = "ARM64"` in T31's task definitions. Graviton
+          # is cheaper per vCPU-hour; an amd64 image here would build fine and ECS would refuse
+          # to start it, which is a confusing failure a long way from its cause.
+          platforms: linux/arm64
+          push: true
+          # The commit SHA, and nothing else. No `latest`: ECR repositories are created with
+          # IMMUTABLE tags, so a tag means one image forever — which is what makes a rollback to
+          # a named tag mean anything. A moving `latest` would quietly defeat that.
+          tags: ${{ steps.ecr.outputs.registry }}/opspilot-staging/${{ matrix.service }}:${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.service }}-release
+          cache-to: type=gha,scope=${{ matrix.service }}-release,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ matrix.service }}"
+            echo ""
+            echo "Pushed \`opspilot-staging/${{ matrix.service }}:${{ github.sha }}\`."
+            echo ""
+            echo "ECR scans it on push. To deploy, run the **Deploy to staging** workflow with"
+            echo "this tag — it requires a reviewer and runs migrations before anything rolls."
+          } >> "$GITHUB_STEP_SUMMARY"

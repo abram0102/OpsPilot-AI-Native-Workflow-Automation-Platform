@@ -88,9 +88,9 @@ resource "aws_lb" "this" {
   tags = { Name = "${var.name_prefix}-alb" }
 }
 
-resource "aws_lb_target_group" "api" {
-  name        = "${var.name_prefix}-api"
-  port        = var.api_port
+resource "aws_lb_target_group" "web" {
+  name        = "${var.name_prefix}-web"
+  port        = var.web_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "ip"
@@ -99,7 +99,10 @@ resource "aws_lb_target_group" "api" {
     enabled = true
     # The readiness probe, not liveness: readiness is the one that reports a dependency being
     # unavailable, and a task that cannot reach its database should not receive traffic.
-    path                = "/actuator/health/readiness"
+    # The sign-in page, because the web app has no health endpoint of its own and this one
+    # renders without Auth0 configured (T08's honest "not configured" state). It exercises the
+    # standalone server and the static assets, which is what a health check should.
+    path                = "/sign-in"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 30
@@ -167,7 +170,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
 
@@ -196,7 +199,7 @@ resource "aws_lb_listener" "http" {
     for_each = local.tls_enabled ? [] : [1]
     content {
       type             = "forward"
-      target_group_arn = aws_lb_target_group.api.arn
+      target_group_arn = aws_lb_target_group.web.arn
     }
   }
 }
@@ -212,5 +215,99 @@ resource "aws_route53_record" "alias" {
     name                   = aws_lb.this.dns_name
     zone_id                = aws_lb.this.zone_id
     evaluate_target_health = true
+  }
+}
+
+
+# --- internal load balancer: the API ---------------------------------------------------------
+#
+# The Spring API is not public. docs/DEPLOYMENT_RUNBOOK.md §4 puts it behind the web service on
+# the private network, and T31's first draft got this wrong by pointing the public ALB straight
+# at it — which both exposed the API and left the UI undeployed.
+#
+# An internal ALB rather than ECS Service Connect. Service Connect would avoid a second load
+# balancer's hourly charge, which is real money in a stack whose cost is dominated by hourly
+# resources. It is deferred deliberately: this uses target-group machinery already written and
+# validated above, whereas Service Connect would be configuration written blind against an
+# account nobody has run this on yet. Revisit once staging has been seen working — it is a
+# contained change and infra/aws/README.md lists it.
+
+resource "aws_security_group" "internal_alb" {
+  name        = "${var.name_prefix}-internal-alb"
+  description = "Internal API load balancer. Reachable only from inside the VPC."
+  vpc_id      = var.vpc_id
+
+  tags = { Name = "${var.name_prefix}-internal-alb" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_from_vpc" {
+  security_group_id = aws_security_group.internal_alb.id
+  description       = "API port, from inside the VPC only"
+
+  cidr_ipv4   = var.vpc_cidr
+  from_port   = var.api_port
+  to_port     = var.api_port
+  ip_protocol = "tcp"
+}
+
+resource "aws_vpc_security_group_egress_rule" "internal_to_tasks" {
+  security_group_id = aws_security_group.internal_alb.id
+  description       = "To the API tasks"
+
+  cidr_ipv4   = var.vpc_cidr
+  ip_protocol = "-1"
+}
+
+resource "aws_lb" "internal" {
+  name               = "${var.name_prefix}-int"
+  load_balancer_type = "application"
+  # The whole point. No public address, and it lives in the private subnets.
+  internal        = true
+  subnets         = var.private_subnet_ids
+  security_groups = [aws_security_group.internal_alb.id]
+
+  enable_deletion_protection = var.deletion_protection
+  drop_invalid_header_fields = true
+
+  tags = { Name = "${var.name_prefix}-internal" }
+}
+
+resource "aws_lb_target_group" "api" {
+  name        = "${var.name_prefix}-api"
+  port        = var.api_port
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled = true
+    # Readiness, not liveness: a task that cannot reach its database should not receive traffic.
+    path                = "/actuator/health/readiness"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+    timeout             = 5
+    matcher             = "200"
+  }
+
+  deregistration_delay = 30
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_lb_listener" "internal_http" {
+  load_balancer_arn = aws_lb.internal.arn
+  port              = var.api_port
+  protocol          = "HTTP"
+
+  # Plain HTTP, inside the VPC, between two private subnets. TLS here would mean issuing and
+  # rotating an internal certificate for a hop that never leaves the VPC; the public hop is
+  # HTTPS and that is the boundary docs/SECURITY_AND_TESTING.md §1 draws.
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
   }
 }

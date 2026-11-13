@@ -26,10 +26,6 @@ variable "api_target_group_arn" {
   description = "Target group the API service registers into."
   type        = string
 }
-variable "api_internal_host" {
-  description = "Hostname the worker uses to reach the API. The ALB's internal DNS name — the worker is inside the VPC and never goes out and back."
-  type        = string
-}
 variable "alb_listener_dependency" {
   description = "Forces the listener to exist before the service registers targets. ECS fails the service create otherwise."
   type        = any
@@ -157,5 +153,74 @@ variable "redis_secret_arn" {
 }
 variable "internal_service_secret_arn" {
   description = "Secrets Manager entry holding the internal-API signing secret."
+  type        = string
+}
+variable "web_port" {
+  description = "Port the Next.js standalone server listens on."
+  type        = number
+  default     = 3000
+}
+
+variable "web_cpu" {
+  description = "Fargate CPU units for the web task."
+  type        = number
+  default     = 256
+}
+
+variable "web_memory_mb" {
+  description = "Fargate memory for the web task, in MiB."
+  type        = number
+  default     = 512
+}
+
+variable "web_desired_count" {
+  description = "How many web tasks to run."
+  type        = number
+  default     = 1
+}
+
+variable "web_image_tag" {
+  description = "Web image tag. Set by the deploy workflow after the first apply."
+  type        = string
+  default     = "bootstrap"
+}
+
+variable "web_target_group_arn" {
+  description = "Public target group the web service registers into."
+  type        = string
+}
+
+variable "internal_alb_security_group_id" {
+  description = "The internal load balancer's group, allowed to reach the API port."
+  type        = string
+}
+
+variable "internal_api_base_url" {
+  description = "How the web app and worker reach the API. Internal; never leaves the VPC."
+  type        = string
+}
+
+variable "public_base_url" {
+  description = "The URL a browser uses. Auth0 redirects back here, so it must match the application's allowed callback URLs."
+  type        = string
+}
+
+variable "auth0_domain" {
+  description = "Auth0 tenant domain. Not a secret."
+  type        = string
+}
+
+variable "auth0_client_id" {
+  description = "Auth0 application client id. Not a secret — it is in every browser redirect."
+  type        = string
+}
+
+variable "auth0_client_secret_arn" {
+  description = "Secrets Manager entry holding the Auth0 client secret, filled by a human at Gate H3."
+  type        = string
+}
+
+variable "web_session_secret_arn" {
+  description = "Secrets Manager entry holding AUTH0_SECRET, the key the session cookie is encrypted with."
   type        = string
 }

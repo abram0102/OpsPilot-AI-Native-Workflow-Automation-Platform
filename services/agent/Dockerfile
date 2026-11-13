@@ -1,34 +1,70 @@
 # syntax=docker/dockerfile:1
-# Not yet build/run-verified in this environment (no Docker here — see
-# docs/PROGRESS.md T03, same Gate H0 as T01/T02). Re-verify with
-# `docker build .` once Docker is available.
-FROM python:3.12-slim
+#
+# Python agent worker (docs/TASKS.md T32). Rewritten from T03's single-stage version.
+#
+# Two things changed, and the second was a real bug waiting to happen:
+#
+#   1. Multi-stage. `uv` itself, the build cache and the lockfile resolution stay in the builder;
+#      the runtime image carries an interpreter and a virtualenv and nothing else.
+#   2. The CMD. T03's image started `uvicorn ... main:app` — the *health* API. That is not what
+#      the ECS worker task runs: the consumer is `python -m opspilot_agent.streams`, and an image
+#      whose default command serves health checks while consuming nothing would have looked
+#      perfectly healthy in ECS forever. The health server is still available as an explicit
+#      override; see `docker run ... opspilot-worker health`.
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1 \
+# --- build ---------------------------------------------------------------------------------------
+
+FROM python:3.12-slim-bookworm AS build
+
+# Pinned, so the build resolves the same way on every machine. Matches the version recorded in
+# docs/DEPENDENCY_DECISIONS.md for T03.
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /usr/local/bin/uv
+
+ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/app/.venv \
-    PATH="/app/.venv/bin:${PATH}"
-
-# Pin uv's own version so the build is reproducible across machines/CI.
-RUN pip install --no-cache-dir uv==0.13.7
-
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin opspilot
+    UV_PROJECT_ENVIRONMENT=/app/.venv
 
 WORKDIR /app
+
+# Dependencies as their own layer, resolved before the source is copied: a code change should not
+# re-resolve or re-download anything.
 COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
 COPY src ./src
-RUN chown -R opspilot:opspilot /app
 
-USER opspilot
+# Now the project itself. --frozen never silently re-resolves against a lockfile mismatch;
+# --no-dev keeps pytest, ruff and httpx out of the runtime image.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
-# --frozen: never silently re-resolve against a lockfile mismatch.
-# --no-dev: pytest/ruff/httpx stay out of the runtime image.
-RUN uv sync --frozen --no-dev
+# --- runtime -------------------------------------------------------------------------------------
 
-EXPOSE 8000
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).status == 200 else 1)"
+FROM python:3.12-slim-bookworm AS runtime
 
-CMD ["uvicorn", "opspilot_agent.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN groupadd --gid 1000 opspilot \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin opspilot
+
+WORKDIR /app
+
+# The virtualenv and the source, owned by the runtime user. No uv, no build cache, no lockfile.
+COPY --from=build --chown=1000:1000 /app/.venv /app/.venv
+COPY --from=build --chown=1000:1000 /app/src /app/src
+
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src
+
+USER 1000:1000
+
+# The stream consumer. No port, no listener: nothing connects to the worker — it consumes a Redis
+# stream and calls the internal API outbound (docs/SECURITY_AND_TESTING.md §1, worker boundary).
+#
+# There is deliberately no HEALTHCHECK. A container health check needs something to ask, and this
+# process serves nothing; ECS treats a task whose process exits as failed, which is the correct
+# signal for a consumer. Queue health is reported by `make worker-health` and the metrics in
+# docs/OBSERVABILITY.md, not by this container.
+ENTRYPOINT ["python", "-m"]
+CMD ["opspilot_agent.streams"]

@@ -26,3 +26,18 @@ output "ecr_repository_arns" {
   description = "Both repositories, for the deploy role's push policy."
   value       = [aws_ecr_repository.api.arn, aws_ecr_repository.worker.arn]
 }
+
+output "web_service_arn" {
+  description = "Web service, for the deploy role's scoped UpdateService permission."
+  value       = aws_ecs_service.web.id
+}
+
+output "web_repository_url" {
+  description = "ECR repository the web image is pushed to."
+  value       = aws_ecr_repository.web.repository_url
+}
+
+output "cluster_arn" {
+  description = "Cluster ARN, used to condition the deploy role's RunTask permission."
+  value       = aws_ecs_cluster.this.arn
+}

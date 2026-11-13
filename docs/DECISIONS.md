@@ -903,3 +903,62 @@ resource list.
    exact version and records its hashes — the same supply-chain control as a committed
    `pnpm-lock.yaml` or `uv.lock`, and exactly the kind of thing T28's dependency work exists to
    protect. Overridden in `infra/aws/.gitignore` so it is committed.
+
+## ADR-057 — T32: images CI actually runs, deployment split in two, and the T31 architecture corrected
+
+**Context.** T32 asks for multi-stage Dockerfiles, PR builds, OIDC deployment with SHA tagging, a
+sequential migration job, smoke checks and rollback. Its acceptance begins "local image builds and
+health checks" — on a machine with no Docker (Gate H0).
+
+**Decision 1 — CI builds *and runs* every image on every PR.** Since there is no Docker here, CI
+is the only place that acceptance can be met at all. A build-only job would not have been enough:
+the API's first `ENTRYPOINT` was `java -jar app.jar`, which builds perfectly and fails at runtime,
+because a layered Spring Boot extraction has no jar to run — the manifest's `Main-Class` is
+`JarLauncher` and the layers are directories. I caught that by extracting the real jar locally
+rather than by reasoning about it, and the `images` job now starts each container: a non-root
+check, an import of the worker's module, Spring's own startup line in the API, and a served page
+from the web image.
+
+**Decision 2 — the worker's `CMD` was wrong and is now the consumer.** T03's image ran
+`uvicorn ... main:app`, the *health* API. The ECS worker task runs the stream consumer. An image
+whose default command serves health checks while consuming nothing would have looked perfectly
+healthy in ECS indefinitely — the failure that is hardest to notice, because every signal says
+fine.
+
+**Decision 3 — building and deploying are separate workflows.** Building is safe and repeatable;
+rolling out is a decision. Keeping them apart means an image exists, is scanned and can be
+inspected well before anyone chooses to deploy it, and means a rollback has something to roll back
+*to*. Only the deploy workflow targets the protected environment with a required reviewer.
+
+**Decision 4 — no `latest` tag.** ECR repositories are created with immutable tags, so a tag means
+one image forever. A moving `latest` would quietly defeat that and make "the image we deployed"
+unanswerable.
+
+**Decision 5 — migrations are a one-off task whose exit code is checked.** Not boot-time
+migration: with more than one replica that means replicas racing each other on the schema, which
+`docs/DEPLOYMENT_RUNBOOK.md` §2 forbids. The job waits for the task to stop, reads the container's
+exit code, and fails the workflow without rolling anything if it is non-zero.
+
+**Three defects found while writing this, two of them mine from T31.**
+
+1. **T31 pointed the public ALB straight at the API and never deployed the web app.** The UI was
+   undeployable and the API needlessly public — directly contrary to the architecture in
+   `docs/DEPLOYMENT_RUNBOOK.md` §4. Corrected here: a web service, the public ALB in front of it,
+   and an internal ALB for the API. An internal ALB rather than ECS Service Connect is a cost
+   trade taken knowingly — Service Connect avoids the second load balancer's hourly charge, but it
+   would be configuration written blind, where the internal ALB reuses machinery already written
+   and validated.
+2. **The deploy role's policy was a wildcard that read as scoped.** Its resources were
+   `concat(var.ecs_service_arns, ["*"])` — adding `"*"` to a list does not narrow anything, it
+   widens the statement to every resource in the account. Split into three statements:
+   `UpdateService` on the three services, `RunTask` scoped to this environment's task families and
+   conditioned on this cluster, and the genuinely unscopable `RegisterTaskDefinition` plus
+   read-only describes. The README claimed "no wildcard admin role" while this was in place.
+3. **`ecs:RunTask` was missing entirely**, so the migration job would have failed on AccessDenied
+   the first time anyone ran it.
+
+**On verification.** `actionlint` lints all four workflows (and caught a real shellcheck issue in
+the deploy workflow on its first run); it is now part of `make lint`. Every one of the thirteen
+pinned action SHAs was looked up against the GitHub API rather than written from memory — three of
+my first attempts were invented and wrong. None of that makes the deploy path *tested*: it has
+never run, and it cannot until Gate H3.

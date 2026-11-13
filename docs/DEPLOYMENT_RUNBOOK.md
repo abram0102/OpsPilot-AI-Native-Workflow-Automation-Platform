@@ -70,6 +70,42 @@ argument matches the provider schema; they do not prove it applies. `infra/aws/R
 Gate H3 checklist, the state-backend block to paste in, the cost drivers ranked, and the known
 gaps.
 
+## 4a. Images and deployment (implemented at T32)
+
+Three multi-stage Dockerfiles, all non-root, all built for **linux/arm64** to match the Graviton
+task definitions:
+
+| Image | Dockerfile | Build context | Entrypoint |
+|---|---|---|---|
+| web | `apps/web/Dockerfile` | **repository root** (it imports `@contracts/*`) | `node server.js` (Next.js standalone) |
+| api | `services/api/Dockerfile` | `services/api` | `java org.springframework.boot.loader.launch.JarLauncher` |
+| worker | `services/agent/Dockerfile` | `services/agent` | `python -m opspilot_agent.streams` |
+
+CI's **`images`** job builds all three on every pull request and then *runs* them — a non-root
+check, an import check on the worker, Spring startup on the API, and a served page from the web
+image. Nothing is pushed. That job is the only place the "local image builds and health checks"
+acceptance can be met, since the development machine has no Docker (Gate H0).
+
+Two workflows, deliberately separate:
+
+- **`build-images.yml`** — on push to `main`. Assumes the OIDC role, builds arm64, pushes to ECR
+  tagged with the commit SHA. No `latest`: ECR tags are immutable, so a tag means one image
+  forever, which is what makes a rollback to a named tag meaningful.
+- **`deploy-staging.yml`** — `workflow_dispatch` only, against the protected `staging`
+  environment with a required reviewer. It runs **Flyway as a one-off task and waits for its
+  exit code** before any service rolls (§2: never let replicas race the schema), then rolls
+  api → worker → web, then `aws ecs wait services-stable`, then a smoke check. A rollout that
+  does not stabilise fails the workflow; the service's deployment circuit breaker rolls it back.
+
+**Rollback.** The workflow records each service's current task definition before changing
+anything and prints the exact `update-service` commands in its job summary on failure. A rollback
+does **not** undo the migration — Flyway ran first, and if the schema change is not backward
+compatible the previous image may not run against it. Restoring an RDS snapshot is a human
+decision with its own approval (§6).
+
+**Neither deployment workflow has ever run.** Both are written against infrastructure that does
+not exist until Gate H3.
+
 ## 5. Deployment procedure (post implementation)
 
 1. Confirm CI green, secret scan clean, threat-model/regression checks green, current eval baseline recorded.

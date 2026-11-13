@@ -41,3 +41,14 @@ variable "access_logs_bucket" {
   type        = string
   default     = ""
 }
+
+variable "web_port" {
+  description = "Port the Next.js standalone server listens on."
+  type        = number
+  default     = 3000
+}
+
+variable "private_subnet_ids" {
+  description = "Private subnets for the internal API load balancer."
+  type        = list(string)
+}

@@ -216,3 +216,31 @@ variable "oidc_audience" {
   type        = string
   default     = "https://api.opspilot.local"
 }
+
+variable "web_cpu" {
+  description = "Fargate CPU units for the web task. 256 = 0.25 vCPU; a Node server is far lighter than a JVM."
+  type        = number
+  default     = 256
+}
+
+variable "web_memory_mb" {
+  description = "Fargate memory for the web task."
+  type        = number
+  default     = 512
+}
+
+variable "web_desired_count" {
+  description = "Web tasks. One for staging; production wants at least two so a deploy is not an outage."
+  type        = number
+  default     = 1
+}
+
+variable "auth0_domain" {
+  description = "Auth0 tenant domain, e.g. dev-xxxx.us.auth0.com. Not a secret."
+  type        = string
+}
+
+variable "auth0_client_id" {
+  description = "Auth0 application client id. Not a secret — it appears in every browser redirect."
+  type        = string
+}
