@@ -51,8 +51,14 @@ RUN pnpm build
 
 FROM node:26-bookworm-slim AS runtime
 
-RUN groupadd --gid 1000 opspilot \
-    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin opspilot
+# uid/gid 10001, not 1000. The base images disagree about who owns 1000: Ubuntu Noble (the API's
+# JRE base) ships a default `ubuntu` user there and node:26 ships `node` there, so `groupadd
+# --gid 1000` exits 4, "GID already in use". Debian slim happens to leave it free, which is
+# exactly the kind of inconsistency that makes one image fail and another pass for no visible
+# reason — CI caught it on the API and the web image would have failed the same way one step
+# later. A high, fixed id is free on all three and collides with no host user either.
+RUN groupadd --gid 10001 opspilot \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin opspilot
 
 WORKDIR /app
 
@@ -67,11 +73,11 @@ ENV NODE_ENV=production \
 
 # Only what the server needs. `standalone` already contains the trimmed node_modules; `static`
 # and `public` are served from disk and are not inside it.
-COPY --from=build --chown=1000:1000 /app/.next/standalone ./
-COPY --from=build --chown=1000:1000 /app/.next/static ./.next/static
-COPY --from=build --chown=1000:1000 /app/public ./public
+COPY --from=build --chown=10001:10001 /app/.next/standalone ./
+COPY --from=build --chown=10001:10001 /app/.next/static ./.next/static
+COPY --from=build --chown=10001:10001 /app/public ./public
 
-USER 1000:1000
+USER 10001:10001
 
 EXPOSE 3000
 

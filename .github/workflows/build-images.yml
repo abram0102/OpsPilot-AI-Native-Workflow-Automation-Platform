@@ -31,6 +31,14 @@ jobs:
   build:
     name: ${{ matrix.service }}
     runs-on: ubuntu-latest
+    # Skipped entirely until Gate H3 provides the role. Without this the job runs on every push
+    # to main, fails at "Assume the deploy role" because the variable is empty, and the
+    # repository shows a red X forever — which is worse than useless: it teaches everyone that
+    # red is the normal colour, and the next genuine failure goes unnoticed.
+    #
+    # A skipped job is neutral, not green, so this does not fake a pass either. The moment
+    # AWS_DEPLOY_ROLE_ARN is set, it starts running with no further change.
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
     # Not a protected environment. Pushing an image changes nothing that serves traffic; the
     # reviewer gate belongs on the deploy, where it is.
     strategy:

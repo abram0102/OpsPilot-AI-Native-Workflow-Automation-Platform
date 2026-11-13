@@ -1,4 +1,4 @@
-import { test, expect } from "../src/fixtures.js";
+import { test, expect, createTicket } from "../src/fixtures.js";
 
 /**
  * The product's whole point, end to end in a browser: ask the agent, wait for it to propose
@@ -24,10 +24,13 @@ test.describe("ask the agent and approve what it proposes", () => {
   }) => {
     test.slow(); // the worker has to pick the run up off the stream and walk the graph
 
-    await acmePage.goto(`/app/${acmeOrgId}/tickets`);
-    await acmePage.getByRole("link", { name: /Where is my order\? \(Demo\)/ }).click();
-    await acmePage.waitForURL(/\/tickets\/[0-9a-f-]{36}$/);
-    const ticketUrl = acmePage.url();
+    // Its own ticket, not a seeded one. These assertions are exact counts, so the ticket has to
+    // be untouched — including by an earlier repeat of this same test. See createTicket.
+    const ticketUrl = await createTicket(
+      acmePage,
+      acmeOrgId,
+      `E2E agent approval ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
 
     await acmePage.getByRole("button", { name: "Ask the agent" }).click();
 
@@ -63,9 +66,9 @@ test.describe("ask the agent and approve what it proposes", () => {
     // appeared — "an AI-generated draft is never automatically published" cuts both ways, and a
     // published message that differed from what the human approved would be just as wrong.
     await acmePage.goto(ticketUrl);
-    // Exactly one. `scripts/e2e-stack.sh` resets the schema before every run, so this is a real
-    // count and not a "greater than zero" that would also pass if approving published twice —
-    // which, given this product's whole premise, is the failure worth catching.
+    // Exactly one. The test created this ticket, so the count is unambiguous — not a "greater
+    // than zero" that would also pass if approving published twice, which, given this product's
+    // whole premise, is the failure worth catching.
     await expect(acmePage.getByText(AGENT_MESSAGE.name, { exact: true })).toHaveCount(1, {
       timeout: 30_000,
     });
@@ -80,12 +83,13 @@ test.describe("ask the agent and approve what it proposes", () => {
 
     // The negative half of the same claim, and the one that would catch the worst possible bug in
     // this product: a run started and deliberately left undecided must put nothing on the ticket.
-    await acmePage.goto(`/app/${acmeOrgId}/tickets`);
-    await acmePage.getByRole("link", { name: /Refund request for order #4821 \(Demo\)/ }).click();
-    await acmePage.waitForURL(/\/tickets\/[0-9a-f-]{36}$/);
-    const ticketUrl = acmePage.url();
+    const ticketUrl = await createTicket(
+      acmePage,
+      acmeOrgId,
+      `E2E agent pending ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
 
-    // Nothing has run against this ticket, and the schema was reset before the suite started.
+    // Nothing has run against this ticket: the test just created it.
     await expect(acmePage.getByText(AGENT_MESSAGE.name, { exact: true })).toHaveCount(0);
 
     await acmePage.getByRole("button", { name: "Ask the agent" }).click();

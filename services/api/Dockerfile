@@ -47,18 +47,25 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # A fixed non-root uid. Numeric so it is still non-root if the image is run somewhere that does
-# not resolve the name, and matching the worker's so volume permissions behave the same way.
-RUN groupadd --gid 1000 opspilot \
-    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin opspilot
+# not resolve the name, and the same across all three images so volume permissions behave
+# identically.
+# uid/gid 10001, not 1000. The base images disagree about who owns 1000: Ubuntu Noble (the API's
+# JRE base) ships a default `ubuntu` user there and node:26 ships `node` there, so `groupadd
+# --gid 1000` exits 4, "GID already in use". Debian slim happens to leave it free, which is
+# exactly the kind of inconsistency that makes one image fail and another pass for no visible
+# reason — CI caught it on the API and the web image would have failed the same way one step
+# later. A high, fixed id is free on all three and collides with no host user either.
+RUN groupadd --gid 10001 opspilot \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin opspilot
 
 WORKDIR /app
 
-COPY --from=build --chown=1000:1000 /build/extracted/dependencies/ ./
-COPY --from=build --chown=1000:1000 /build/extracted/spring-boot-loader/ ./
-COPY --from=build --chown=1000:1000 /build/extracted/snapshot-dependencies/ ./
-COPY --from=build --chown=1000:1000 /build/extracted/application/ ./
+COPY --from=build --chown=10001:10001 /build/extracted/dependencies/ ./
+COPY --from=build --chown=10001:10001 /build/extracted/spring-boot-loader/ ./
+COPY --from=build --chown=10001:10001 /build/extracted/snapshot-dependencies/ ./
+COPY --from=build --chown=10001:10001 /build/extracted/application/ ./
 
-USER 1000:1000
+USER 10001:10001
 
 EXPOSE 8080
 
