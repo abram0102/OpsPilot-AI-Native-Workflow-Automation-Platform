@@ -11,6 +11,29 @@ Baseline targets:
 
 Version changes should be made as explicit dependency update tickets and accompanied by smoke tests.
 
+## T31 notes — 2026-11-13
+
+- **No new application dependency.** T31 adds infrastructure definitions and two developer tools;
+  nothing was added to any service manifest.
+- **OpenTofu 1.13.9** (`brew install opentofu`) as the IaC tool, with the AWS provider pinned
+  `~> 6.0` and `.terraform.lock.hcl` committed — the same supply-chain control as a lockfile in
+  any other ecosystem, and it had to be un-ignored from the root `.gitignore` to get there.
+
+  Chosen over HashiCorp Terraform, which is the more conventional answer. Terraform is BUSL-
+  licensed since 1.6 and is no longer in Homebrew core; OpenTofu is the Linux Foundation fork
+  under MPL-2.0 and is a drop-in — the HCL in `infra/aws/` is standard and runs unchanged under
+  either binary, so this is reversible by substituting the command. The reason to prefer it here
+  is that this repository has not chosen its own licence (`docs/DECISIONS.md` ADR-006), and a
+  BUSL build dependency is a constraint to adopt deliberately rather than by default. AWS CDK was
+  rejected separately: it would add a fourth language to a repository that already carries Java,
+  Python and TypeScript.
+- **TFLint 0.66.0** with **tflint-ruleset-aws 0.44.0** (`brew install terraform-linters/tap/tflint`).
+  `tofu validate` checks that a configuration is well-formed; it does not know that an instance
+  class does not exist or that an argument was deprecated two provider versions ago. The AWS
+  ruleset checks against the provider's own schema. Developer tools, not dependencies: a missing
+  binary makes `make iac-validate` print how to install it, and in tflint's case skip that step
+  rather than fail.
+
 ## T29 notes — 2026-11-12
 
 New package `tests/e2e` (`@opspilot/e2e`), with its own `package.json` and `pnpm-lock.yaml`. Kept

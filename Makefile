@@ -17,6 +17,7 @@ SHELL := /bin/bash
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e \
 	test-security test-security-external audit-deps \
+	iac-validate iac-plan \
 	infra-test-up infra-test-down \
 	eval-mock eval-real check seed-demo generate-contracts
 
@@ -170,6 +171,45 @@ test-security-external: ## Same suite, against servers you are already running (
 	cd apps/web && $(NVM_USE) pnpm vitest run \
 		src/app/api/run-status/route.test.ts \
 		src/lib/api/knowledge-rules.test.ts
+
+# --- infrastructure (T31) -----------------------------------------------------------------------
+#
+# Everything here is static. Nothing in this file can reach an AWS account: `tofu init
+# -backend=false` fetches the provider from the public registry and configures no state backend,
+# and neither `validate` nor `tflint` makes an API call. `plan` and `apply` are deliberately NOT
+# make targets — see infra/aws/README.md and Gate H3 in docs/MANUAL_SETUP.md.
+
+IAC_DIR := infra/aws
+
+iac-validate: ## Format-check, validate and lint the AWS IaC. Makes no AWS calls — T31
+	@command -v tofu >/dev/null 2>&1 || { \
+		echo "✗ opentofu is not installed. brew install opentofu (or use terraform: the HCL is the same)." >&2; \
+		exit 1; \
+	}
+	cd $(IAC_DIR) && tofu fmt -recursive -check
+	cd $(IAC_DIR) && tofu init -backend=false -input=false >/dev/null
+	cd $(IAC_DIR) && tofu validate
+	@command -v tflint >/dev/null 2>&1 || { \
+		echo "note: tflint is not installed, skipping the provider-schema lint." >&2; \
+		exit 0; \
+	}
+	# Per directory, explicitly. `tflint --recursive` does not apply this config to the module
+	# directories — it looks for a .tflint.hcl in each one — so a recursive run reported three
+	# issues where an explicit sweep found forty-seven.
+	@cd $(IAC_DIR) && for dir in . modules/*/; do \
+		(cd "$$dir" && tflint --config "$(CURDIR)/$(IAC_DIR)/.tflint.hcl" --format compact) || exit 1; \
+	done
+	@printf '\033[32m✓ IaC format, validate and lint passed (no AWS calls made)\033[0m\n'
+
+iac-plan: ## Refuses. A plan needs real AWS credentials and is a Gate H3 step — T31
+	@printf '\033[33m! %s is deliberately not a make target.\033[0m\n' "$@" >&2
+	@echo "A plan requires AWS credentials and a state backend, which is Gate H3 in docs/MANUAL_SETUP.md." >&2
+	@echo "Once that gate is open, run it yourself and read the output:" >&2
+	@echo "" >&2
+	@echo "  cd $(IAC_DIR) && tofu init && tofu plan -var-file=environments/staging.tfvars" >&2
+	@echo "" >&2
+	@echo "Nothing in this repository will run plan or apply for you." >&2
+	@exit 1
 
 # docs/SECURITY_AND_TESTING.md §8.5: "dependency advisory check with actionable report".
 # OSV-Scanner reads this repo's three lockfiles directly (pom.xml, uv.lock, pnpm-lock.yaml) and

@@ -59,6 +59,17 @@ Logs/traces/alerts -> CloudWatch + optional Sentry
 - Avoid overprovisioning: use the smallest measured service sizes and autoscaling based on CPU/queue age as needed. Produce a human-reviewed cost plan.
 - Do not deploy or incur charges automatically based on these docs.
 
+**Implemented at T31** in `infra/aws/` as OpenTofu (not HashiCorp Terraform — see that directory's
+README for why, and note the HCL runs unchanged under either). `make iac-validate` format-checks,
+validates and lints it and **makes no AWS calls**; `make iac-plan` deliberately refuses and prints
+the command for you to run yourself once Gate H3 is open. Nothing in the repository runs `plan` or
+`apply`.
+
+The configuration has never been applied. Validate and lint prove it is well-formed and that every
+argument matches the provider schema; they do not prove it applies. `infra/aws/README.md` has the
+Gate H3 checklist, the state-backend block to paste in, the cost drivers ranked, and the known
+gaps.
+
 ## 5. Deployment procedure (post implementation)
 
 1. Confirm CI green, secret scan clean, threat-model/regression checks green, current eval baseline recorded.

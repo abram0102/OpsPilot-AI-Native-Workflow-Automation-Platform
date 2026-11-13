@@ -834,3 +834,72 @@ never configured gains a package, an outbound network client and a supply-chain 
 for nothing. The import is lazy and the feature inert unless `SENTRY_DSN` is set — but a DSN set
 *without* the SDK raises rather than continuing quietly, because the failure worth preventing is an
 operator believing errors are reported when they are not.
+
+## ADR-056 — T31: OpenTofu, a configuration that cannot reach AWS, and a plan target that refuses
+
+**Context.** T31 asks for the infrastructure as code. Its human gate (H3) is on `apply`, and
+`AGENTS.md` rule 15 puts every deployment and billing action behind the operator. So the ticket is
+to write something reviewable and prove it is well-formed, without any of it being able to touch
+an account.
+
+**Decision 1 — OpenTofu rather than HashiCorp Terraform.** The ticket says "choose one and
+document". Terraform is now BUSL-licensed and out of Homebrew core; OpenTofu is the MPL fork and a
+drop-in — the HCL here runs unchanged under either binary. This repository has not chosen its own
+licence (ADR-006), so taking a BUSL build dependency on its behalf is not a decision to make
+quietly. CDK was rejected for a smaller reason: a fourth language in a repository that already has
+three.
+
+**Decision 2 — no backend block, and `plan` is not a make target.** The state bucket has to exist
+before the configuration that would create it, so `versions.tf` has no `backend` and the README
+carries the block to paste in at Gate H3. The consequence is useful: the only `init` anyone can run
+today is `-backend=false`, which fetches the provider from the public registry and talks to no
+account. `make iac-plan` exists purely to refuse and print the command the operator runs
+themselves. A target that *could* plan would need credentials, and the first time it found some in
+an environment variable it would be reaching into a real account.
+
+**Decision 3 — security groups reference groups, not CIDRs.** The database and cache rules name the
+tasks' security group. Task IPs change on every deploy, so the alternative is a subnet-wide CIDR —
+which is wider than intended on day one and widens further every time someone adds a subnet. The
+database is unreachable for three independent reasons (no route, `publicly_accessible = false`,
+group-scoped rule), and that redundancy is deliberate: any one of them can be edited by mistake.
+
+**Decision 4 — `iam:PassRole` is scoped to exactly three roles.** This is the subtlest line in the
+configuration. A deploy role that can `RegisterTaskDefinition` *and* pass any role can attach an
+administrator role to a container, which is a straight path from "can deploy" to "owns the
+account". It is restricted to the execution role and the two task roles, with a condition that they
+may only be passed to ECS.
+
+Likewise the GitHub OIDC trust pins `sub` to one repository **and** one ref. `repo:owner/name:*` is
+the common form and it is wrong: any branch matches it, and a pull request from a fork runs on a
+branch.
+
+**Decision 5 — the pgvector check is a plan-time precondition.** `docs/DEPLOYMENT_RUNBOOK.md` §2
+says to check extension availability before launch. A data source reads the engine's supported
+features and a `precondition` fails the plan if `vector` is absent — so the failure arrives before
+anything exists, rather than as Flyway's `V001` failing against a database that is already running
+and already billing.
+
+**Decision 6 — secrets the configuration cannot generate get empty slots.** The database password,
+Redis token and internal signing secret are generated and written to Secrets Manager. The Auth0
+client secret and any LLM key cannot be, so the configuration creates placeholder secrets with
+`ignore_changes` on the value: the operator fills them in the console and no apply overwrites them.
+The alternative — a variable — puts the secret in a tfvars file, a shell history and the plan
+output.
+
+**No cost figures in the README.** Prices vary by region and change without notice, and a stale
+number in a document reads as a fact (AGENTS.md: never invent metrics). The README ranks the cost
+*drivers* instead — the NAT gateway first, because it bills hourly and per GB whether or not
+anything flows — and names the lever for each, so the operator prices it themselves against a real
+resource list.
+
+**Two things caught while verifying, both about the verification rather than the code.**
+
+1. **`tflint --recursive` did not apply this configuration's rules to the modules.** It looks for a
+   `.tflint.hcl` in each directory, so a recursive run reported **3** issues where an explicit
+   per-directory sweep found **47**. I had nearly reported a clean lint that was clean only because
+   most of the code had not been linted. `make iac-validate` now loops the directories explicitly
+   and says why in a comment.
+2. **The root `.gitignore` excluded `.terraform.lock.hcl`.** That file pins each provider to an
+   exact version and records its hashes — the same supply-chain control as a committed
+   `pnpm-lock.yaml` or `uv.lock`, and exactly the kind of thing T28's dependency work exists to
+   protect. Overridden in `infra/aws/.gitignore` so it is committed.

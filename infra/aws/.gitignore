@@ -1,0 +1,21 @@
+# Real variable files: they name your account's region, domain and hosted zone, and they are
+# per-operator. The .example is the committed one.
+*.tfvars
+!*.tfvars.example
+
+# State must never be committed. It contains the generated database password and Redis token in
+# plain text — which is also why the backend bucket in README.md is encrypted and access-
+# controlled rather than "just a bucket".
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+
+# .terraform.lock.hcl is deliberately NOT ignored. It pins each provider to a specific version
+# and records its hashes, which is the same supply-chain control as a committed pnpm-lock.yaml or
+# uv.lock — without it, two people init the same configuration and get different providers.
+
+# Overriding the root .gitignore, which excludes this file globally. It belongs in version
+# control: it pins each provider to an exact version and records its hashes, the same
+# supply-chain control as pnpm-lock.yaml or uv.lock.
+!.terraform.lock.hcl
