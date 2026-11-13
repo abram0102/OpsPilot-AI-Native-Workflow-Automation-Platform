@@ -119,6 +119,13 @@ not exist until Gate H3.
 
 ## 6. Incident runbooks
 
+> **Four of these have been drilled and the outcomes recorded** in `docs/FAILURE_DRILLS.md`
+> (T33): database outage, Redis outage, worker killed mid-action, and an unreachable LLM
+> provider. The database drill found a real defect — readiness took 30 seconds to answer `DOWN`
+> because nothing overrode HikariCP's default connection timeout — which is fixed and re-drilled
+> at 2,041 ms. The drills ran against the **local** stack; nothing about AWS, backups or alarms
+> has been exercised, and that file is explicit about which is which.
+
 ### Queue lag or Redis unavailable
 
 - Symptoms: queue depth and oldest outbox age rising; `QUEUED` runs remain waiting.

@@ -35,6 +35,7 @@
 | `docs/SECURITY_AND_TESTING.md` | Threat model, test cases, gates, metrics, evaluation design |
 | `docs/THREAT_MODEL.md` | Threat-to-test map; `scripts/check-threat-model.py` fails CI if a referenced test is renamed |
 | `docs/OBSERVABILITY.md` | What is measured, where to look, suggested alerts, and the gaps |
+| `docs/FAILURE_DRILLS.md` | What actually happened when dependencies were killed — outcomes, not guesses |
 | `infra/aws/README.md` | The AWS deployment, Gate H3 checklist and cost drivers. Never applied — read before you do |
 | `tests/e2e/README.md` | How the Playwright suite signs in offline and what it covers (`make test-e2e`) |
 | `docs/TASKS.md` | T00–T36 sequential implementable tickets, deliverables and acceptance |

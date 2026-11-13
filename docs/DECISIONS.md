@@ -962,3 +962,60 @@ the deploy workflow on its first run); it is now part of `make lint`. Every one 
 pinned action SHAs was looked up against the GitHub API rather than written from memory — three of
 my first attempts were invented and wrong. None of that makes the deploy path *tested*: it has
 never run, and it cannot until Gate H3.
+
+## ADR-058 — T33: drills against a proxy, and the 30-second readiness probe they found
+
+**Context.** T33's Build line begins "execute only after explicit permission", and all six of its
+acceptance criteria need a running staging environment: an HTTPS URL, E2E against it, an alarm
+firing, a tested RDS restore, observed cloud costs. Gate H3 is not open, so none of that is
+reachable. Unlike T31 and T32 there is no artifact to write and statically verify.
+
+What *is* reachable is the half the ticket cares most about: "Drill killing worker after action DB
+commit, Redis outage, failed LLM and RDS unavailable; **document outcomes, not guesses**." Three of
+those four are about application behaviour, not AWS, and can be drilled locally for real.
+
+**Decision 1 — fail the dependency with a proxy, not by stopping it.** `scripts/drill-proxy.py`
+forwards a TCP port; killing it severs every connection and refuses new ones, which is what the
+application experiences when a managed service goes away. Stopping the developer's real Redis or
+Postgres would do the same thing and damage the environment the drill runs in — and a drill that
+costs you your working state is a drill nobody repeats. No third-party dependency: `socat` does
+this in one line and is not installed here, and asking an operator to install something before
+they can run a drill is how drills stop being run.
+
+**Decision 2 — record outcomes including the ones that are wrong.** `docs/FAILURE_DRILLS.md` is
+written as observations with numbers, not as a description of intended behaviour. The first
+database drill is in it twice — once failing, once fixed — because the failing run is the evidence
+that the fix was needed.
+
+**What the database drill found.** With the database unreachable, readiness was *correct* and
+unusably slow: no response for 30 seconds, then `DOWN`. Spring logged it itself —
+`Health contributor DataSourceHealthIndicator (db) took 30016ms to respond`. Nothing had overridden
+HikariCP's 30-second default `connection-timeout`.
+
+That is a production problem rather than a slow log line, for a reason that only shows up when you
+put it next to T31: the ALB target group's health check has a **5-second timeout**. Every probe
+would time out instead of receiving a clean `DOWN`, so the task leaves rotation for the right
+reason by accident. And each hanging probe holds a Tomcat worker thread for thirty seconds; with
+the ALB and ECS both probing, they accumulate, and a starved thread pool takes **liveness** down
+too. "Remove from rotation" becomes "kill and restart", in a loop, precisely when the system is
+already degraded.
+
+`connection-timeout: 2000` in `application.yml` fixes it: `DOWN` in 2,041 ms, liveness `UP`
+throughout, recovery to `UP` one second after the database returned with no restart. The trade is
+written at the setting — the same bound governs how long a *request* waits for a connection when
+the pool is busy, so under load requests now fail after two seconds instead of queueing for thirty.
+Fail fast and let the balancer shed is the better failure, but it is a behaviour change and is not
+free. The full Java suite was run twice afterwards to check the shorter timeout had not made
+Testcontainers runs flaky.
+
+Notably, Redis already had 2-second connect and command timeouts configured. The datasource never
+got the same treatment, and no test would ever have noticed: every test has a database that works.
+
+**Decision 3 — say what the drills cannot tell you.** They ran locally. RDS failover, snapshot
+restore, CloudWatch alarms firing, the real ALB health check, ElastiCache failover and actual costs
+are all untested, and `docs/FAILURE_DRILLS.md` lists them under a heading that says so. The
+backup/restore procedure is written out and explicitly marked as never executed — a backup you have
+not restored is a backup you have not got, and writing the steps down does not change that.
+
+**T33 is therefore not DONE and is recorded as PARTIAL.** Four drills, real outcomes, one defect
+found and fixed. Every acceptance criterion that names staging remains unmet.

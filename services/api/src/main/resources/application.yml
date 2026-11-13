@@ -11,6 +11,27 @@ spring:
       port: ${REDIS_PORT:6379}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
       timeout: ${REDIS_COMMAND_TIMEOUT:2s}
+  datasource:
+    hikari:
+      # 2 seconds, not Hikari's 30-second default. Found by T33's database-outage drill: with
+      # the database unreachable the readiness probe did eventually answer DOWN — after 30.016
+      # seconds, which Spring itself logged as "Health contributor DataSourceHealthIndicator (db)
+      # took 30016ms to respond".
+      #
+      # Why that is a production problem and not a slow log line. T31's ALB target group health
+      # check has a 5-second timeout, so every probe would time out rather than receive a clean
+      # DOWN — the task is removed from rotation for the right reason by accident. Worse, each
+      # hanging probe holds a Tomcat worker thread for the full 30 seconds; with the ALB and
+      # ECS both probing, those accumulate, and a thread pool starved during a database outage
+      # takes liveness down with it. "Remove from rotation" becomes "kill and restart", in a
+      # loop, at exactly the moment the system is already degraded.
+      #
+      # The trade is real and deliberate: this timeout also bounds how long a *request* waits
+      # for a connection when the pool is busy, so under sustained load requests now fail after
+      # two seconds instead of queueing for thirty. That is the better failure — fail fast and
+      # let the load balancer shed — but it is a behaviour change, not a free win.
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:2000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
 
 server:
   port: ${API_PORT:8080}
