@@ -1081,3 +1081,93 @@ capacity estimate. §6's "p95 under 500 ms" belongs on staging.
 degrade identically once a tenant has many runs. The fix is known and the evidence transfers, but
 it has not been benchmarked — and this ticket's rule is that an optimisation ships with its own
 evidence. It is recorded as the first remaining bottleneck rather than fixed speculatively.
+
+---
+
+## ADR-060 — T35: the screenshots are a test, and what driving the product found
+
+**Context.** T35 asks for a README with screenshots from a real running app, an architecture
+diagram, a demo script, and résumé bullets backed only by measured numbers. Its acceptance is
+unusual in that most of it is about honesty rather than behaviour: "screenshots show working
+features", "links are real", "resume bullet claims supported by benchmarks".
+
+**Decision 1 — screenshots are produced by a Playwright test, not by a human with a cropping
+tool.** `tests/e2e/tests/screenshots.spec.ts` drives the real stack and overwrites
+`docs/images/*.png`; `make screenshots` runs it. A hand-taken screenshot shows whatever the app
+looked like the day someone took it, and nothing fails when that stops being true. This way a
+feature that breaks cannot keep a working-looking picture, and the README's images are as current
+as the last run.
+
+It is excluded from the default suite (`testIgnore` unless `E2E_INCLUDE_SCREENSHOTS` is set),
+because writing files into `docs/` is a side effect no test should have by default.
+
+**Decision 2 — "links are real" is a check, not a promise.** `scripts/check-links.py` resolves
+every relative link and in-repo anchor in every Markdown file and runs inside `make lint`, so CI
+fails on a dead link. It deliberately does not fetch external URLs: that would make an offline
+`make lint` depend on the internet and on other people's uptime. Its slug rule matches GitHub's,
+including the detail that consecutive spaces become consecutive hyphens — `## Drill 3 — Worker
+killed` anchors as `#drill-3--worker-killed`, and collapsing them would both reject links that
+work and accept links that do not.
+
+**What driving the product through the UI found, which the test suite could not.** The first run
+captured a trace reading "No sources were cited": the demo seed creates no knowledge documents, so
+every screenshot of the agent showed the retrieval half of the product doing nothing. Uploading
+one through the UI — rather than seeding a row, which would have been a screenshot of a value
+typed into the database — surfaced two real defects in a row.
+
+**Defect 1 — knowledge ingestion never worked outside tests.** Every upload ended `FAILED` with
+`INDEX_OBJECT_MISSING`. `STORAGE_LOCAL_DIR` ships as the relative `.local-storage`, and a relative
+path resolves against each process's working directory: the API runs from `services/api`, the
+worker from `services/agent`. The API wrote the file into one tree and the indexer looked for it
+in the other. **This broke the documented developer path** — `make api-dev` plus `make worker-dev`
+— not merely the test harness, and no test caught it because each side was individually correct
+and every unit test supplied its own directory. `make api-dev`, `make worker-dev` and
+`scripts/e2e-stack.sh` now anchor a relative value to the repository root; an absolute value is
+left alone.
+
+**Defect 2 — the stack leaked a worker on every run, and the leaks raced the new one.** With the
+path fixed, ingestion still failed. The cause was that `scripts/e2e-stack.sh` cleans up by PID and
+by listening port — and the worker is the one process that binds no port, while `uv run` forks a
+child that does not die with its parent. Six workers were running, one from every run that day.
+They share the `agent-workers` consumer group, so the ingest event was delivered to whichever
+claimed it first, which was usually a process still holding the previous run's configuration. The
+fix that "did not work" had worked; a stale worker was answering for it.
+
+Cleanup now walks the process tree (`kill_tree`), and the script refuses to start when a worker
+from an earlier run is already running — the same reasoning as the existing free-port guard,
+applied to the one process that has no port to check. Worth recording plainly: this is a test-harness
+defect that was silently corrupting results, and it would have produced intermittent, unreproducible
+E2E failures in the nightly repeat runs long before anyone traced it to a leaked process.
+
+**Defect 3 — the reviewer was told every grounded draft had cited nothing.** With ingestion
+working, the run showed retrieval feeding the prompt (input tokens 642 → 1,305) and the approval
+row in the database carrying two citations — while the UI still read "No sources were cited".
+`ApprovalDecisionService.readEvidence` looked for `documentId` / `chunkIndex`; the worker writes
+`document_id` / `chunk_index`, matching `RetrievedChunk` in docs/API_CONTRACT.md. Every citation
+was dropped, on both the run page and the approval page, where the text goes further and tells the
+reviewer "nothing above is backed by a source". For a product whose entire claim is that a human
+reviews grounded output, that is the worst direction for the error to point: it understates the
+evidence and invites the reviewer to distrust a draft that was in fact cited.
+
+It passed CI because **the test fabricated the payload it was testing against** —
+`theDetailViewSurfacesTheCitedEvidence` invented a camelCase proposal, so the reader was asserted
+against its own assumption rather than against what the worker writes. The test now uses the real
+stored shape, verified by reverting the fix and watching it fail; and the producer's half is
+pinned too, in `test_the_approval_carries_the_draft_and_its_citations`, which now asserts the
+exact key set rather than that a list is present. Two tests that each invented a shape agreed
+with each other and not with the system. This is the cross-service seam ADR-047 flagged as
+untested, and it is the second time it has produced a real defect.
+
+**Decision 3 — the ingestion assertion lives in the default E2E suite, not only in the screenshot
+run.** `tests/e2e/tests/knowledge.spec.ts` uploads a document in the browser and waits for it to
+reach `READY`. The first defect above crossed two processes with two working directories, which is
+precisely the seam unit tests on either side cannot see, so the regression test has to be
+end-to-end and has to run in CI.
+
+**Decision 4 — the README leads with the limitations rather than burying them.** Nothing is
+deployed, the AWS IaC has never been applied, the 60-case evaluation measures the deterministic
+mock rather than a model, and backup/restore has never been executed. These appear in a section of
+their own and in the résumé bullets' "what is deliberately absent" note. The résumé bullets carry
+only figures that exist in a file in this repository — latency, throughput, the query-plan
+multiples, the evaluation counts, the drill outcomes — and name no users, uptime, availability or
+cost saving, because there are none to name.

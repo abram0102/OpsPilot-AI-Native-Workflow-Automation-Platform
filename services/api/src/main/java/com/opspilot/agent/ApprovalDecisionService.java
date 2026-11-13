@@ -197,9 +197,19 @@ public class ApprovalDecisionService {
   /**
    * Reads the citations out of the stored proposal.
    *
-   * <p>Tolerant of their absence: the graph that will attach them is T23's, so an approval created
-   * before then simply has no evidence to show, and an empty list is the honest rendering of that
-   * rather than a reason to fail the request.
+   * <p><b>The stored keys are snake_case; the response's are camelCase.</b> The proposal JSON is
+   * written by the Python worker ({@code graphs/triage.py:_approval_proposal}) and carries {@code
+   * document_id} / {@code chunk_index}, matching {@code RetrievedChunk} in docs/API_CONTRACT.md.
+   * The HTTP shape this method builds is camelCase, as the same document's approval-response
+   * example specifies. This reader is the boundary between the two.
+   *
+   * <p>It read camelCase until T35, which means every real citation was silently dropped and every
+   * reviewer was told "No sources were cited" about a draft that did cite sources — the worst
+   * direction for that particular error to point. It passed CI because the test fabricated a
+   * camelCase payload rather than the one the worker writes; the test now uses the real shape.
+   *
+   * <p>Tolerant of absence: an approval carrying no citations simply has no evidence to show, and
+   * an empty list is the honest rendering of that rather than a reason to fail the request.
    */
   private List<ApprovalResponse.EvidenceView> readEvidence(JsonNode proposal) {
     JsonNode citations = proposal.get("citations");
@@ -209,8 +219,8 @@ public class ApprovalDecisionService {
 
     List<ApprovalResponse.EvidenceView> evidence = new ArrayList<>();
     for (JsonNode citation : citations) {
-      JsonNode documentId = citation.get("documentId");
-      JsonNode chunkIndex = citation.get("chunkIndex");
+      JsonNode documentId = citation.get("document_id");
+      JsonNode chunkIndex = citation.get("chunk_index");
       JsonNode title = citation.get("title");
       if (documentId == null || documentId.stringValue() == null) {
         continue;

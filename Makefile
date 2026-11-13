@@ -17,7 +17,7 @@ SHELL := /bin/bash
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e \
 	test-security test-security-external audit-deps \
-	iac-validate iac-plan bench \
+	iac-validate iac-plan bench screenshots \
 	infra-test-up infra-test-down \
 	eval-mock eval-real check seed-demo generate-contracts
 
@@ -79,18 +79,25 @@ infra-reset: _ensure-docker _ensure-env ## Destroy local infra containers AND vo
 	fi
 	$(COMPOSE) down -v
 
+# The API runs from services/api and the worker from services/agent, so a *relative*
+# STORAGE_LOCAL_DIR (what .env.example ships) means two different directories: the API wrote an
+# uploaded document into one and the indexer looked in the other, failing every ingest with
+# INDEX_OBJECT_MISSING. Anchoring a relative value to the repository root is what makes the two
+# processes agree. An absolute value is left alone.
+ANCHOR_STORAGE = case "$${STORAGE_LOCAL_DIR:-.local-storage}" in /*) ;; *) STORAGE_LOCAL_DIR="$(CURDIR)/$${STORAGE_LOCAL_DIR:-.local-storage}";; esac; export STORAGE_LOCAL_DIR;
+
 api-dev: _ensure-env ## Run the Spring Boot API in dev mode (needs `make infra-up` first) — T02
 	# `.env` really is loaded here now (T24). application-local.yml has claimed it since T02, but
 	# nothing was exporting it: POSTGRES_PASSWORD has no default, and OUTBOX_PUBLISHER_ENABLED
 	# would never have reached the process either. `set -a` exports every assignment in the file.
-	set -a && . ./.env && set +a && cd services/api && ./mvnw spring-boot:run
+	set -a && . ./.env && set +a && $(ANCHOR_STORAGE) cd services/api && ./mvnw spring-boot:run
 
 agent-dev: ## Run the Python AI worker's health/queue API in dev mode — T03
 	cd services/agent && uv run uvicorn opspilot_agent.main:app --reload --port $${AGENT_HEALTH_PORT:-8000}
 
 worker-dev: _ensure-env ## Run the Redis Streams consumer (needs `make infra-up` first) — T25
 	# The process that actually does the work; `agent-dev` only serves health and queue depth.
-	set -a && . ./.env && set +a && cd services/agent && uv run python -m opspilot_agent.streams
+	set -a && . ./.env && set +a && $(ANCHOR_STORAGE) cd services/agent && uv run python -m opspilot_agent.streams
 
 worker-health: _ensure-env ## Print queue depth, backlog and dead-letter count as JSON — T25
 	set -a && . ./.env && set +a && cd services/agent && uv run python -m opspilot_agent.streams --health
@@ -110,6 +117,8 @@ lint: ## Run all linters across web/api/agent/e2e — T05, T29
 	# `run:` block — it caught a real issue in the deploy workflow on its first run.
 	@command -v actionlint >/dev/null 2>&1 && actionlint || \
 		echo "note: actionlint is not installed (brew install actionlint), skipping workflow lint." >&2
+	# T35's acceptance says "links are real". A promise decays; a check does not.
+	python3 scripts/check-links.py
 
 # Surefire needs `!` on *each* comma-separated name to exclude all of them
 # (a bare name after a comma is a separate positive-include filter, not a
@@ -176,6 +185,12 @@ test-security-external: ## Same suite, against servers you are already running (
 	cd apps/web && $(NVM_USE) pnpm vitest run \
 		src/app/api/run-status/route.test.ts \
 		src/lib/api/knowledge-rules.test.ts
+
+screenshots: _ensure-env ## Regenerate docs/images/*.png from the real running app — T35
+	# Brings the whole stack up exactly as `make test-e2e` does, then drives it to capture the
+	# screenshots the README embeds. They are produced by the test suite rather than by hand so
+	# a broken feature cannot keep a working-looking picture.
+	E2E_INCLUDE_SCREENSHOTS=1 bash scripts/e2e-stack.sh tests/screenshots.spec.ts
 
 bench: ## Run the k6 load test against a 10k-ticket fixture — T34
 	# Needs PostgreSQL running and a migrated `opspilot_bench` database; see benchmarks/README.md.

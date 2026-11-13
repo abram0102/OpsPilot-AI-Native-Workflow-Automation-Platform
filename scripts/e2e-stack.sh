@@ -33,12 +33,27 @@ PIDS=()
 log() { printf '\033[36m[e2e-stack]\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[31m[e2e-stack] ✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
+# Kills a process and everything below it. `uv run` and `mvnw` both fork a child that does the
+# real work and does not die with its parent, and the worker — unlike the API and the web app —
+# binds no port, so the port sweep below cannot find it. Leaving it running is not merely untidy:
+# a leaked worker stays subscribed to the same Redis consumer group, so the *next* run's events
+# are delivered to a process holding the previous run's configuration. That is exactly how T35's
+# storage-path fix appeared not to work — five stale workers from earlier runs were racing the
+# new one for the ingest event, and the stale ones won.
+kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 cleanup() {
   local status=$?
   log "stopping the stack"
   for pid in "${PIDS[@]:-}"; do
     [ -n "$pid" ] || continue
-    kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+    kill_tree "$pid"
   done
 
   # Then by port, which is what actually works. `mvnw spring-boot:run` forks a JVM and `next start`
@@ -75,7 +90,32 @@ set -a
 . ./.env
 set +a
 
+# A relative STORAGE_LOCAL_DIR resolves against each process's working directory, and the API
+# (services/api) and the worker (services/agent) have different ones — so an uploaded document
+# landed in one tree and the indexer looked for it in the other, failing every ingest with
+# INDEX_OBJECT_MISSING. Found by T35's screenshot run, the first thing to upload a document
+# through the UI and then wait for it to become READY. Anchored to the repository root, both
+# processes mean the same directory.
+case "${STORAGE_LOCAL_DIR:-.local-storage}" in
+  /*) ;;
+  *) STORAGE_LOCAL_DIR="$REPO_ROOT/${STORAGE_LOCAL_DIR:-.local-storage}" ;;
+esac
+export STORAGE_LOCAL_DIR
+
 command -v openssl >/dev/null 2>&1 || fail "openssl is required to generate the test identity key."
+
+# The same reasoning as require_free_port, for the one process that has no port. A worker left
+# over from an earlier run shares the `agent-workers` consumer group with the one this script is
+# about to start, so roughly half the events would be handled by a process configured by whatever
+# the environment looked like then. A run that does that produces results nobody can trust, so it
+# does not start.
+stray_workers="$(pgrep -f 'opspilot_agent\.streams' 2>/dev/null || true)"
+if [ -n "$stray_workers" ]; then
+  printf '%s\n' "$stray_workers" | while read -r stray; do
+    log "  pid $stray: $(ps -o command= -p "$stray" 2>/dev/null)"
+  done
+  fail "an agent worker from an earlier run is still running (pids above). It shares the Redis consumer group with the one this script starts, so events would be split between them. Stop it with: pkill -f 'opspilot_agent.streams'"
+fi
 
 # This suite seeds tenants and creates tickets, so it gets a database of its own. Pointing it at
 # the database `make api-dev` uses would mix test rows into a developer's own data and, worse,

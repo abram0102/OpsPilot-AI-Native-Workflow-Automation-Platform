@@ -350,12 +350,17 @@ class ApprovalHttpIntegrationTest {
   @Test
   void theDetailViewSurfacesTheCitedEvidence() throws Exception {
     UUID documentId = UUID.randomUUID();
+    // The exact shape the Python worker stores — snake_case keys and a score, as written by
+    // graphs/triage.py:_approval_proposal from knowledge/retrieval.py's RetrievedChunk. This
+    // test previously invented a camelCase payload, so it passed while the reader dropped every
+    // real citation and the UI told reviewers a grounded draft had cited nothing (T35).
     Approval approval =
         pendingApproval(
             "call-1",
-            "{\"body\":\"Delivery takes 3-5 days.\",\"citations\":[{\"documentId\":\""
+            "{\"body\":\"Delivery takes 3-5 days.\",\"citations\":[{\"score\":0.0299,"
+                + "\"title\":\"Shipping FAQ\",\"chunk_index\":2,\"document_id\":\""
                 + documentId
-                + "\",\"chunkIndex\":2,\"title\":\"Shipping FAQ\"}]}");
+                + "\"}]}");
 
     mockMvc
         .perform(

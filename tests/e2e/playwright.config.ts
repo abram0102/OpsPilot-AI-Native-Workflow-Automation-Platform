@@ -27,6 +27,10 @@ const BROWSER = requested as BrowserName;
 
 export default defineConfig({
   testDir: "./tests",
+  // The screenshot spec writes PNGs into docs/ and is only wanted when regenerating them
+  // (`make screenshots`), so it is excluded from the normal run. A test with a side effect on
+  // the repository should never be something you get by accident.
+  testIgnore: process.env.E2E_INCLUDE_SCREENSHOTS ? [] : ["**/screenshots.spec.ts"],
   // A tenant-isolation test and an agent-run test can interleave safely — they touch different
   // tenants and different tickets — but they share one seeded database, so full parallelism across
   // files is not free. One worker locally keeps failures readable; CI gets the same for

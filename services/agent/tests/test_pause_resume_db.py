@@ -165,6 +165,16 @@ class TestPausing:
         assert "citations" in approval.proposal
         assert isinstance(approval.proposal["citations"], list)
 
+        # And the key names, not merely the presence of a list. Java's ApprovalDecisionService
+        # reads these out of the stored JSON to build the camelCase `evidence` the browser gets,
+        # and until T35 it looked for `documentId`/`chunkIndex` — so every citation was dropped
+        # and every reviewer was told a grounded draft had cited nothing. Neither side's tests
+        # caught it, because each asserted against a shape it had invented. This pins the
+        # producer's half of that contract; ApprovalHttpIntegrationTest pins the consumer's.
+        if approval.proposal["citations"]:
+            citation = approval.proposal["citations"][0]
+            assert set(citation) == {"document_id", "chunk_index", "title", "score"}
+
     async def test_the_pause_survives_a_fresh_worker_process(
         self, db_connection, settings, seeded
     ) -> None:
