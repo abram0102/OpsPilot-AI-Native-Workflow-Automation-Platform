@@ -1,0 +1,8 @@
+# Context is services/api. See the root .dockerignore for the reasoning — the same secret and
+# build-output rules apply here, scoped to this service.
+.env
+.env.*
+!.env.example
+target
+.mvn/wrapper/maven-wrapper.jar
+**/.DS_Store

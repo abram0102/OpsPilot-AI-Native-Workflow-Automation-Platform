@@ -16,7 +16,14 @@
 
 FROM node:26-bookworm-slim AS deps
 
-RUN corepack enable
+# pnpm via npm, not Corepack. Node 26 no longer ships it, so `corepack enable` exits 127 inside
+# this image. CI's web job gets away with that only because it runs the command before
+# actions/setup-node, on the runner's older preinstalled Node — the image has no such luxury, and
+# the difference cost a CI round trip to find.
+#
+# Pinned to the version in package.json's `packageManager` field. A floating pnpm could resolve
+# the committed lockfile differently, which is the one thing a lockfile exists to prevent.
+RUN npm install --global pnpm@12.16.1
 WORKDIR /app
 
 # Dependencies as their own layer. pnpm-workspace.yaml carries the minimatch override T28 added,
@@ -30,7 +37,8 @@ RUN --mount=type=cache,target=/pnpm-store \
 
 FROM node:26-bookworm-slim AS build
 
-RUN corepack enable
+# Same reasoning as the deps stage above.
+RUN npm install --global pnpm@12.16.1
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules

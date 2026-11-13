@@ -1,0 +1,44 @@
+# Build context exclusions for the web image, whose context is the repository root
+# (docs/TASKS.md T32).
+#
+# The first entry is the one that matters. `apps/web/Dockerfile` does `COPY apps/web ./`, and
+# apps/web/.env.local holds a real Auth0 client secret on a developer's machine. Without this
+# file a local `docker build` bakes that secret into an image layer — where it survives every
+# later COPY, is readable by anyone who can pull the image, and would be pushed to ECR.
+#
+# CI could never have caught it: a fresh checkout has no .env.local, so the pipeline is green
+# and only the developer's own build is poisoned. Found by reading the context, not by a test.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Nothing that is rebuilt inside the image should be shipped into it — and node_modules built on
+# a macOS host would quietly break a linux image if it survived the copy.
+**/node_modules
+**/.next
+**/target
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+
+# Infrastructure state: .tfstate contains the generated database password in plain text.
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+!**/*.tfvars.example
+
+# Test and tooling output.
+tests/e2e/test-results
+tests/e2e/playwright-report
+tests/e2e/blob-report
+evals/reports/*.json
+evals/reports/*.md
+
+# Not needed to build anything, and .git is large.
+.git
+.github
+docs
+benchmarks
+**/.DS_Store
