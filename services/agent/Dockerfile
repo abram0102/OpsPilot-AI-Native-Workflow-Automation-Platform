@@ -14,7 +14,7 @@
 
 # --- build ---------------------------------------------------------------------------------------
 
-FROM python:3.12-slim-bookworm AS build
+FROM python:3.15-slim-bookworm AS build
 
 # Pinned, so the build resolves the same way on every machine. Matches the version recorded in
 # docs/DEPENDENCY_DECISIONS.md for T03.
@@ -41,7 +41,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # --- runtime -------------------------------------------------------------------------------------
 
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 
 # uid/gid 10001, not 1000. The base images disagree about who owns 1000: Ubuntu Noble (the API's
 # JRE base) ships a default `ubuntu` user there and node:26 ships `node` there, so `groupadd
