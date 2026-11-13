@@ -117,13 +117,16 @@ public class TicketServiceImpl implements TicketService {
         decoded == null
             ? tickets.findFirstPage(
                 organizationId, status, priority, PageRequest.of(0, pageSize + 1))
-            : tickets.findPageAfter(
+            // The native row-value form, not the JPQL one: 0.038 ms against 4.109 ms at a cursor
+            // 5,000 rows deep (T34; the measurement is in TicketRepository's javadoc). The enums
+            // are passed as their names because a native query binds to the text column.
+            : tickets.findPageAfterNative(
                 organizationId,
-                status,
-                priority,
+                status == null ? null : status.name(),
+                priority == null ? null : priority.name(),
                 decoded.createdAt(),
                 decoded.id(),
-                PageRequest.of(0, pageSize + 1));
+                pageSize + 1);
 
     boolean hasMore = rows.size() > pageSize;
     List<Ticket> page = hasMore ? rows.subList(0, pageSize) : rows;

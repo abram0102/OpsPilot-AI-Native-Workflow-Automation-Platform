@@ -1,0 +1,32 @@
+-- An index matching the ticket list's actual ORDER BY (docs/TASKS.md T34).
+--
+-- Measured, not guessed. `EXPLAIN (ANALYZE, BUFFERS)` on the default page the UI loads, against
+-- the 10,000-ticket fixture in benchmarks/fixture.sql:
+--
+--   Limit (actual time=2.216..2.222 rows=21)
+--     Buffers: shared hit=642
+--     ->  Sort (Sort Key: created_at DESC, id DESC; top-N heapsort)
+--           ->  Seq Scan on tickets (rows=10000, Rows Removed by Filter: 1003)
+--   Execution Time: 2.253 ms
+--
+-- The whole table read and sorted, to return twenty-one rows.
+--
+-- Why the existing index could not help. V002 created
+-- `(organization_id, status, created_at DESC)`, which is excellent when `status` is supplied —
+-- the same page filtered by status plans as an Index Scan and runs in 0.061 ms. But `status` sits
+-- in the middle, so with no status filter the index cannot be walked in `created_at` order, and
+-- the unfiltered list is the common case: it is what the tickets page loads by default and what
+-- every "next page" follows.
+--
+-- `id` is in the index because the keyset cursor is `(created_at, id)` — the tiebreaker that
+-- makes pagination stable when two tickets share a timestamp. Without it, Postgres can use the
+-- index for ordering but still has to sort within each timestamp group.
+--
+-- DESC on both columns to match the query exactly. Postgres can scan an index backwards, so
+-- an ASC index would also work here; stating the order the query uses keeps the intent legible
+-- and avoids relying on that.
+--
+-- This does not replace idx_tickets_org_status_created. The two serve different queries, and
+-- dropping the older one would regress the filtered path from 0.061 ms to a scan.
+CREATE INDEX idx_tickets_org_created_id
+    ON tickets (organization_id, created_at DESC, id DESC);

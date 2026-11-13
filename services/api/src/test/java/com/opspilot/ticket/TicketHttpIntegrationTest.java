@@ -267,6 +267,75 @@ class TicketHttpIntegrationTest {
   }
 
   @Test
+  void pagingWithAFilterKeepsTheFilterOnEveryPage() throws Exception {
+    // T34 added a native row-value query for the cursor page, because the JPQL OR-form could not
+    // be pushed into an index condition (0.038 ms against 4.109 ms at a cursor 5,000 rows deep).
+    // Native SQL needs explicit CAST(? AS text) wrappers so PostgreSQL can type a NULL that only
+    // appears in an IS NULL test — and *no test combined a cursor with a filter*, so a mistake in
+    // exactly that new code would have passed everything.
+    //
+    // This walks every page with a status filter and asserts three things: nothing is duplicated,
+    // nothing is skipped, and no row of the wrong status appears.
+    User owner = users.saveAndFlush(user("filter-pager"));
+    Organization org = organizations.saveAndFlush(organization(owner));
+    memberships.saveAndFlush(new Membership(org.getId(), owner.getId(), MembershipRole.OWNER));
+    Customer customer =
+        customers.saveAndFlush(
+            new Customer(org.getId(), "Pat", "pat-" + UUID.randomUUID() + "@x.test"));
+
+    // Alternating statuses, so a filtered page is interleaved in the underlying order rather
+    // than sitting in one contiguous block the cursor could stumble over by luck.
+    int open = 0;
+    for (int i = 0; i < 24; i++) {
+      Ticket ticket =
+          new Ticket(
+              org.getId(),
+              customer.getId(),
+              "Filtered " + i,
+              "d",
+              TicketPriority.LOW,
+              owner.getId());
+      if (i % 2 == 0) {
+        open++;
+      } else {
+        ticket.setStatus(TicketStatus.IN_PROGRESS);
+      }
+      tickets.saveAndFlush(ticket);
+    }
+
+    Set<UUID> seen = new HashSet<>();
+    String cursor = null;
+    int pageCount = 0;
+    do {
+      var requestBuilder =
+          get("/api/v1/organizations/{orgId}/tickets", org.getId())
+              .queryParam("limit", "5")
+              .queryParam("status", "OPEN")
+              .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(owner));
+      if (cursor != null) {
+        requestBuilder = requestBuilder.queryParam("cursor", cursor);
+      }
+      String body =
+          mockMvc
+              .perform(requestBuilder)
+              .andExpect(status().isOk())
+              .andReturn()
+              .getResponse()
+              .getContentAsString();
+      TicketPageResponse page = objectMapper.readValue(body, TicketPageResponse.class);
+      for (TicketResponse ticket : page.items()) {
+        assertThat(ticket.status()).isEqualTo(TicketStatus.OPEN);
+        assertThat(seen.add(ticket.id())).as("ticket %s seen twice", ticket.id()).isTrue();
+      }
+      cursor = page.nextCursor();
+      pageCount++;
+      assertThat(pageCount).isLessThan(12);
+    } while (cursor != null);
+
+    assertThat(seen).as("every OPEN ticket appears exactly once across the pages").hasSize(open);
+  }
+
+  @Test
   void pagesDoNotDuplicateOrSkipRecordsAcrossCursors() throws Exception {
     User owner = users.saveAndFlush(user("owner-paging"));
     Organization org = organizations.saveAndFlush(organization(owner));

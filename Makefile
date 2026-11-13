@@ -17,7 +17,7 @@ SHELL := /bin/bash
 	api-dev agent-dev web-dev \
 	lint test-unit test-integration test-contract test-e2e \
 	test-security test-security-external audit-deps \
-	iac-validate iac-plan \
+	iac-validate iac-plan bench \
 	infra-test-up infra-test-down \
 	eval-mock eval-real check seed-demo generate-contracts
 
@@ -176,6 +176,11 @@ test-security-external: ## Same suite, against servers you are already running (
 	cd apps/web && $(NVM_USE) pnpm vitest run \
 		src/app/api/run-status/route.test.ts \
 		src/lib/api/knowledge-rules.test.ts
+
+bench: ## Run the k6 load test against a 10k-ticket fixture — T34
+	# Needs PostgreSQL running and a migrated `opspilot_bench` database; see benchmarks/README.md.
+	# Starts its own API, mints its own token, tears both down. No Redis, no worker, no model.
+	bash scripts/bench.sh
 
 # --- infrastructure (T31) -----------------------------------------------------------------------
 #

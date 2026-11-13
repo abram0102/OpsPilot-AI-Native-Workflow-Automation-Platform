@@ -1019,3 +1019,65 @@ not restored is a backup you have not got, and writing the steps down does not c
 
 **T33 is therefore not DONE and is recorded as PARTIAL.** Four drills, real outcomes, one defect
 found and fixed. Every acceptance criterion that names staging remains unmet.
+
+## ADR-059 — T34: two measured query fixes, and why an untouched endpoint getting faster is not a claim
+
+**Context.** T34 wants k6 scripts, a 10k-ticket fixture, baselines, `EXPLAIN ANALYZE`, "1–2
+measured improvements", model latency kept separate from API latency, and "do not claim fabricated
+numbers". It is explicitly allowed to run locally, which makes it the first ticket since T30 whose
+acceptance is fully reachable here.
+
+**Decision 1 — the fixture reloads on every run, and two tenants exist.** The load profile's
+`create` scenario inserted roughly 25,000 tickets during the 60-second baseline. A second run
+against those leftovers would measure the leftovers, so `fixture.sql` deletes and recreates its
+tenants each time. Two tenants rather than one because with a single organization in the table
+every index lookup "filters" to 100% of rows, and a missing `organization_id` in an index costs
+nothing — Org B exists to be in the way.
+
+**What the first EXPLAIN found.** The default page the tickets UI loads was a `Seq Scan` over all
+11,003 rows plus a top-N heapsort, to return twenty-one. V002's index is
+`(organization_id, status, created_at DESC)`: `status` sits in the middle, so with no status
+filter it cannot be walked in `created_at` order. The *filtered* page was already fine at 0.061 ms
+on that same index, which is exactly why nobody had noticed — the index existed, was used, and
+served the less common case.
+
+`V007` adds `(organization_id, created_at DESC, id DESC)`, matching the ORDER BY including the
+keyset tiebreaker. 2.253 ms → 0.354 ms, 642 → 20 buffers. The old index stays; dropping it would
+regress the filtered path.
+
+**Decision 2 — the deep page needed a row-value comparison, and that means native SQL.** With the
+new index the deep page was still slow, and the plan said why: `a < ? OR (a = ? AND b < ?)` cannot
+be pushed into an index condition, so PostgreSQL walked the index from the newest row and applied
+the cursor as a *filter*, discarding 5,001 rows. The cost grew with page depth — the precise
+failure keyset pagination exists to prevent, hidden behind an index that looked like it was
+working.
+
+`(created_at, id) < (?, ?)` becomes an `Index Cond`. 4.109 ms → 0.038 ms, 30,250 → 6 buffers.
+Both plans use the same index; the difference is entirely where the predicate runs.
+
+JPQL has no row-value syntax, so this is the repository's only native query. The exception is
+justified by the measurement and the measurement lives in the method's javadoc, next to the code
+it explains.
+
+**A gap the change exposed.** No test combined a cursor with a filter. The native query's
+`CAST(:status AS text) IS NULL` handling is exactly the code that would break there, and nothing
+would have caught it — ten ticket tests passed with the new query on the first run.
+`pagingWithAFilterKeepsTheFilterOnEveryPage` now walks every page with a status filter and asserts
+no duplicates, no skips, and no wrong-status row.
+
+**Decision 3 — report the contention effect as inference, not as a result.** Ticket creation and
+run status improved by about two thirds, and neither touches a changed query. The honest reading
+is that the list endpoint had been sequentially scanning 11,003 rows a thousand times a second on
+a laptop shared by the API, the database and the load generator; removing that freed cache, CPU
+and connections. **Those endpoints did not get faster, they stopped waiting.** The report says so,
+because "ticket creation is 65% faster" would be a fabricated claim about code that did not
+change.
+
+For the same reason the report leads with the fact that the load generator shares a machine with
+what it tests: these figures compare the system against itself across a change, and are not a
+capacity estimate. §6's "p95 under 500 ms" belongs on staging.
+
+**Left undone on purpose.** `AgentRunRepository.findPageAfter` has the identical OR-shape and will
+degrade identically once a tenant has many runs. The fix is known and the evidence transfers, but
+it has not been benchmarked — and this ticket's rule is that an optimisation ships with its own
+evidence. It is recorded as the first remaining bottleneck rather than fixed speculatively.

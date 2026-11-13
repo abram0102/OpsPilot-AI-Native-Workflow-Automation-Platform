@@ -1,0 +1,4 @@
+# Raw k6 output and API logs are generated artefacts, not source. The dated report that
+# interprets them is committed; the megabytes it was derived from are not.
+*
+!.gitignore

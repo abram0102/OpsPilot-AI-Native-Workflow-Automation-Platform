@@ -88,6 +88,7 @@ Built one reviewed ticket at a time from a 36-ticket backlog. Organizations, mem
 | `docs/THREAT_MODEL.md` | Each threat, its mitigation, and the test that holds it (checked by CI) |
 | `docs/OBSERVABILITY.md` | Metrics, alert thresholds and what is deliberately not measured |
 | `docs/FAILURE_DRILLS.md` | Failure drills with observed outcomes, and the backup/restore procedure |
+| `benchmarks/2026-11-13-report.md` | Measured before/after load test and query plans, with the limits stated |
 | `docs/TASKS.md` | Sequential implementation backlog |
 | `docs/DECISIONS.md` | Architecture decision record |
 | `docs/PROGRESS.md` | Per-ticket status and evidence (source of truth) |

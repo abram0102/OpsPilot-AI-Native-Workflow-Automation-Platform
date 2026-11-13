@@ -40,6 +40,58 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
       @Param("priority") TicketPriority priority,
       Pageable pageable);
 
+  /**
+   * The cursor page, as a <em>native</em> query using a row-value comparison.
+   *
+   * <p>This is the one place in the repository that is not JPQL, and the reason is measured. T34
+   * benchmarked the previous JPQL form — {@code createdAt < :ts OR (createdAt = :ts AND id < :id)}
+   * — against the 10,000-ticket fixture in benchmarks/fixture.sql, at a cursor 5,000 rows in, with
+   * the matching index in place:
+   *
+   * <pre>
+   * OR form:               Index Scan + Filter, Rows Removed by Filter: 5001,
+   *                        Buffers: shared hit=30250,  Execution Time: 4.109 ms
+   * row-constructor form:  Index Scan, predicate inside Index Cond, no rows removed,
+   *                        Buffers: shared hit=6,      Execution Time: 0.038 ms
+   * </pre>
+   *
+   * <p>108x faster, and five thousand times fewer buffers. The difference is not the index — both
+   * plans use it — but <em>where the predicate runs</em>. PostgreSQL cannot push an {@code OR} of
+   * two comparisons into an index condition, so it walks the index from the newest row and throws
+   * away everything before the cursor: the cost grows with how deep the page is, which is the
+   * precise failure keyset pagination exists to avoid. {@code (created_at, id) < (?, ?)} is a
+   * single row-value comparison that becomes an {@code Index Cond}, so the scan starts at the
+   * cursor.
+   *
+   * <p>It is native because JPQL has no row-value syntax; this cannot be expressed in HQL at all.
+   * The {@code CAST(? AS text)} wrappers on the optional filters are the native-query equivalent of
+   * the type-inference problem described above — without them PostgreSQL cannot determine the
+   * parameter type of a NULL that only ever appears in an {@code IS NULL} test.
+   *
+   * <p>{@code AgentRunRepository.findPageAfter} has the identical OR-shape and the same fix
+   * applies; it is left alone here because it has not been measured, and this ticket's rule is that
+   * an optimisation ships with its evidence.
+   */
+  @Query(
+      value =
+          """
+          SELECT * FROM tickets
+          WHERE organization_id = :organizationId
+            AND (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))
+            AND (CAST(:priority AS text) IS NULL OR priority = CAST(:priority AS text))
+            AND (created_at, id) < (:cursorCreatedAt, :cursorId)
+          ORDER BY created_at DESC, id DESC
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<Ticket> findPageAfterNative(
+      @Param("organizationId") UUID organizationId,
+      @Param("status") String status,
+      @Param("priority") String priority,
+      @Param("cursorCreatedAt") Instant cursorCreatedAt,
+      @Param("cursorId") UUID cursorId,
+      @Param("limit") int limit);
+
   @Query(
       """
       SELECT t FROM Ticket t
