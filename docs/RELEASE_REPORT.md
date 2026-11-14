@@ -13,8 +13,9 @@ incomplete by construction:
   and no `apply` has ever run, and no AWS account is attached to this project.
 - **Backup and restore has never been executed.** The procedure is written. A restore that has
   not been performed is not a backup you have.
-- **The real-model path is barely exercised.** The default provider is a deterministic mock. A
-  real model has been run only as a smoke test, and the 60-case evaluation measures the mock.
+- **No real model has ever been called.** The default provider is a deterministic mock and
+  always has been. The adapter is contract-verified offline only; `make eval-real` refuses with
+  five named missing items until Gate H2 is opened, and the evaluation measures the mock.
 
 What it *is*: a complete, locally runnable, evidence-backed system whose security and reliability
 properties are tested rather than asserted. The distinction matters, and the rest of this document
@@ -30,7 +31,7 @@ The release criteria are §9 of [`docs/PRODUCT_AND_ARCHITECTURE.md`](PRODUCT_AND
 |---|---|---|---|
 | 1 | Two-tenant isolation tests pass | **PASS** | `SecurityRegressionSweepIntegrationTest` enumerates every mapped route and probes it unauthenticated and cross-tenant; 4 Playwright isolation tests; composite FKs carry `organization_id`. Full Java suite 265/265. |
 | 2 | API returns typed responses and authorization errors | **PASS** | Structured JSON with stable codes; `GlobalExceptionHandler` covers 400/401/403/404/405/409/413/415. OpenAPI generated from the running app, drift-checked in CI. |
-| 3 | Agent mock **and real-mode** smoke tests pass | **PARTIAL** | Mock: 355/355 Python tests, 60-case evaluation. Real: a single smoke at T20 against a funded key; not re-run since, and not in CI by design (it costs money). |
+| 3 | Agent mock **and real-mode** smoke tests pass | **FAIL (real half)** | Mock: 355/355 Python tests, 60-case evaluation, all green. Real: **never run.** T20 is recorded BLOCKED for exactly this reason — no key exists here, a paid call needs the operator's explicit authorization under AGENTS.md §15, and `make eval-real` refuses with exit code 2 until Gate H2 is opened. The adapter is verified offline via `MockTransport`, which proves the request and response contract and nothing about a model. |
 | 4 | All risky publishing needs approval | **PASS** | Policy gate in Python *and* an independent re-check in Java; `InternalAgentActionHttpIntegrationTest` (26 cases) rejects publication without, with fabricated, pending, rejected and mismatched approvals. |
 | 5 | Double submission has one effect | **PASS** | Unique `(run_id, tool_call_id)`; `AgentActionIdempotencyIntegrationTest` fires ten concurrent duplicates and asserts one row. Drill 3 confirms it operationally after `kill -9`. |
 | 6 | Restart recovery tests pass | **PASS** | Checkpoint resume across a fresh process; outbox crash-window republish; [drills 1–3](FAILURE_DRILLS.md) observed, not assumed. |
@@ -41,7 +42,9 @@ The release criteria are §9 of [`docs/PRODUCT_AND_ARCHITECTURE.md`](PRODUCT_AND
 | 11 | No insecure public auth bypass | **PASS** | The test issuer is refused unless explicitly enabled and fails startup under the `production` profile; `ProductionSafetyGuard` also refuses both committed development secrets. |
 
 **Release-blocking invariants: all pass.** Clauses 3 and 7 are incomplete against gates that
-require money and a cloud account, not against the code.
+require money and a cloud account, not against the code — but note the asymmetry between them:
+clause 7's deployment is written and never executed, while clause 3's real-model half has never
+run at all. Neither has been demonstrated; only one of them has ever been attempted.
 
 ## 2. Full test matrix — run for this report
 

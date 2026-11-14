@@ -176,9 +176,12 @@ names them.
 - **Nothing is deployed.** `infra/aws/` is written, formatted, validated and linted, and has
   **never been applied** — no `plan`, no `apply`, no AWS account. Everything it claims about
   staging is unverified. ([`infra/aws/README.md`](infra/aws/README.md))
-- **The real-provider path is barely exercised.** The default is a deterministic mock. A real
-  model has been run only as a smoke test; the 60-case evaluation measures the mock, so its
-  accuracy figure describes the harness and the prompt scaffolding, not a model.
+- **No real model has ever been called.** The default is a deterministic mock, and that is the
+  only provider this system has ever run against. The OpenAI-compatible adapter is written and
+  verified offline against a mocked transport — request shaping, usage parsing, error mapping,
+  cost arithmetic — but `make eval-real` refuses until Gate H2 is opened, and it never has been.
+  The 60-case evaluation therefore measures the mock and the prompt scaffolding around it, not a
+  model's judgement.
 - **Backup and restore is written, never tested.** The procedure exists; no restore has been
   performed. ([`docs/FAILURE_DRILLS.md`](docs/FAILURE_DRILLS.md#backup-and-restore--written-never-tested))
 - **The failure drills killed local processes**, not cloud infrastructure. RDS failover,

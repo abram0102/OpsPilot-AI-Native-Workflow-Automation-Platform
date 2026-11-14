@@ -1,0 +1,1187 @@
+<title>OpsPilot Walkthrough</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: the product's own shell — fixed rail, scrolling canvas — with a disclosure strip
+     above it and a guide rail below on narrow screens. Tokens are lifted from
+     apps/web/src/app/globals.css so this reads as the app, not as an impression of it. */
+  :root {
+    color-scheme: light;
+
+    --brand-900: #061f28;
+    --brand-800: #0a2e3a;
+    --brand-700: #0c3b4a;
+    --brand-600: #10505f;
+    --brand-500: #176b7d;
+    --brand-400: #2f8ca0;
+    --brand-300: #7bb8c6;
+    --brand-100: #d9e7eb;
+    --brand-50: #eef4f6;
+
+    --accent-600: #96731f;
+    --accent-500: #b8912f;
+    --accent-50: #f7f1df;
+
+    --success-600: #1b6e4b;
+    --success-50: #e4f2ea;
+    --warning-600: #96580a;
+    --warning-50: #fbf0dd;
+    --danger-600: #a3261f;
+    --danger-50: #fbe9e7;
+
+    --background: #f6f6f3;
+    --surface: #ffffff;
+    --surface-sunken: #eef0ee;
+    --surface-hover: #e9edee;
+    --border: #dde2e2;
+    --border-strong: #c3cccd;
+    --foreground: #11262d;
+    --muted: #55686f;
+    --on-brand: #f4f9fa;
+    --on-brand-muted: #a9c7cf;
+    /* Text on a tinted brand surface. The product has this token for a reason: --brand-600 is
+       only legible on the light tint, so using it directly fails in dark mode — which is what
+       an axe run on this page caught. */
+    --brand-ink: var(--brand-600);
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+    --shadow-sm: 0 1px 2px rgb(6 31 40 / 6%), 0 1px 3px rgb(6 31 40 / 4%);
+
+    --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --background: #071a21;
+      --surface: #0b2630;
+      --surface-sunken: #08202a;
+      --surface-hover: #113340;
+      --border: #17404f;
+      --border-strong: #255a6c;
+      --foreground: #e8f1f3;
+      --muted: #93b0b8;
+      --brand-100: #164454;
+      --brand-50: #0f303c;
+      --brand-ink: var(--brand-300);
+      --success-50: #0d2e22;
+      --warning-50: #33250c;
+      --danger-50: #3a1512;
+      --success-600: #6fcfa2;
+      --warning-600: #e0ab5a;
+      --danger-600: #ef8b82;
+      --accent-600: #dcc078;
+      --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: #071a21;
+    --surface: #0b2630;
+    --surface-sunken: #08202a;
+    --surface-hover: #113340;
+    --border: #17404f;
+    --border-strong: #255a6c;
+    --foreground: #e8f1f3;
+    --muted: #93b0b8;
+    --brand-100: #164454;
+    --brand-50: #0f303c;
+    --brand-ink: var(--brand-300);
+    --success-50: #0d2e22;
+    --warning-50: #33250c;
+    --danger-50: #3a1512;
+    --success-600: #6fcfa2;
+    --warning-600: #e0ab5a;
+    --danger-600: #ef8b82;
+    --accent-600: #dcc078;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { text-wrap: balance; margin: 0; }
+  p { margin: 0; }
+  button { font: inherit; }
+
+  /* --- Disclosure strip ---------------------------------------------- */
+
+  .disclosure {
+    background: var(--brand-900);
+    color: var(--on-brand);
+    border-bottom: 1px solid var(--brand-700);
+  }
+  .disclosureInner {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    font-size: 13px;
+  }
+  .disclosureInner strong { color: #ffd98a; font-weight: 600; }
+  .disclosureInner span { color: var(--on-brand-muted); min-width: 0; }
+  .disclosureInner a { color: var(--brand-300); }
+
+  /* --- App shell ------------------------------------------------------ */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    min-height: 70vh;
+  }
+  @media (max-width: 820px) { .shell { grid-template-columns: 1fr; } }
+
+  .rail {
+    background: var(--brand-800);
+    color: var(--on-brand);
+    padding-block: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  @media (max-width: 820px) {
+    .rail { flex-direction: row; overflow-x: auto; gap: 4px; padding-inline: 8px; }
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 16px 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  @media (max-width: 820px) { .brand { display: none; } }
+  .mark {
+    width: 26px; height: 26px; flex: none;
+    display: grid; place-items: center;
+    background: var(--brand-400);
+    color: var(--brand-900);
+    border-radius: 8px;
+    font-size: 14px; font-weight: 700;
+  }
+
+  .navItem {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-left: 3px solid transparent;
+    color: var(--on-brand-muted);
+    text-align: left;
+    padding: 9px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+  .navItem:hover { color: var(--on-brand); background: rgb(255 255 255 / 5%); }
+  .navItem[aria-current="true"] {
+    color: var(--on-brand);
+    background: var(--brand-700);
+    border-left-color: var(--brand-300);
+    font-weight: 500;
+  }
+  @media (max-width: 820px) {
+    .navItem { border-left: 0; border-bottom: 3px solid transparent; border-radius: 0; }
+    .navItem[aria-current="true"] { border-bottom-color: var(--brand-300); }
+  }
+
+  .railFoot { margin-top: auto; padding: 14px 16px 2px; }
+  @media (max-width: 820px) { .railFoot { display: none; } }
+  .railFoot p { font-size: 12px; color: var(--on-brand-muted); }
+
+  /* --- Canvas --------------------------------------------------------- */
+
+  .canvas {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    /* The bottom value clears the sticky guide bar, which otherwise covers the last card while
+       you scroll. Sticky elements take no space from the content they overlay. */
+    padding-block: 20px 72px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+  }
+  .tenant {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--brand-50);
+    border: 1px solid var(--brand-100);
+    color: var(--brand-ink);
+    border-radius: var(--radius-pill);
+    padding: 4px 6px 4px 12px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .tenant select {
+    font: inherit;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    border-radius: var(--radius-pill);
+    padding: 3px 8px;
+  }
+
+  .pageTitle { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+  .lead { color: var(--muted); max-width: 62ch; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 16px;
+    min-width: 0;
+  }
+  .cardHead {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .cardTitle { font-size: 15px; font-weight: 600; }
+
+  .grid { display: grid; gap: 12px; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .tile .num {
+    font-size: 30px; font-weight: 700; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .lab {
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+
+  .badge {
+    display: inline-flex; align-items: center;
+    border-radius: var(--radius-pill);
+    padding: 2px 10px;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--surface-sunken); color: var(--muted);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .badge.ok { background: var(--success-50); color: var(--success-600); border-color: transparent; }
+  .badge.warn { background: var(--warning-50); color: var(--warning-600); border-color: transparent; }
+  .badge.bad { background: var(--danger-50); color: var(--danger-600); border-color: transparent; }
+  .badge.brand { background: var(--brand-50); color: var(--brand-ink); border-color: transparent; }
+
+  .tableWrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--muted); background: var(--surface-sunken); white-space: nowrap;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-hover); }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  .btn {
+    appearance: none; cursor: pointer;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--brand-700);
+    background: var(--brand-700);
+    color: var(--on-brand);
+    padding: 8px 14px;
+    font-weight: 500;
+  }
+  .btn:hover { background: var(--brand-600); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.secondary { background: var(--surface); color: var(--foreground); border-color: var(--border-strong); }
+  .btn.secondary:hover { background: var(--surface-hover); }
+  .btn.danger { background: var(--surface); color: var(--danger-600); border-color: var(--danger-600); }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .kv dt { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .kv dd { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
+
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-md);
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+  .stepNo {
+    width: 22px; height: 22px; flex: none;
+    display: grid; place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--brand-700); color: var(--on-brand);
+    font-size: 11px; font-weight: 600;
+  }
+  .stepName { font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; }
+
+  blockquote.proposal {
+    margin: 0;
+    border-left: 3px solid var(--accent-500);
+    background: var(--surface-sunken);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 12px 14px;
+  }
+
+  .msg {
+    border-left: 3px solid var(--accent-500);
+    background: var(--accent-50);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 10px 14px;
+  }
+  .msgWho {
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    font-weight: 700; color: var(--accent-600);
+  }
+
+  .evidence {
+    display: flex; justify-content: space-between; gap: 12px; align-items: center;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .evidence code { font-family: var(--font-mono); font-size: 12px; }
+
+  .notice {
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface-sunken);
+    font-size: 14px;
+  }
+  .notice.bad { background: var(--danger-50); border-color: transparent; color: var(--danger-600); }
+  .notice.ok { background: var(--success-50); border-color: transparent; color: var(--success-600); }
+  .notice.warn { background: var(--warning-50); border-color: transparent; color: var(--warning-600); }
+
+  .mono { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+  /* --- Guide ---------------------------------------------------------- */
+
+  .guide {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 10px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    font-size: 13px;
+    z-index: 5;
+  }
+  .guideStep { display: flex; align-items: center; gap: 7px; color: var(--muted); min-width: 0; }
+  .guideStep .dot {
+    width: 18px; height: 18px; flex: none; border-radius: var(--radius-pill);
+    display: grid; place-items: center;
+    border: 1px solid var(--border-strong);
+    font-size: 10px; font-weight: 700;
+  }
+  .guideStep.now { color: var(--foreground); font-weight: 600; }
+  .guideStep.now .dot { background: var(--brand-700); border-color: var(--brand-700); color: var(--on-brand); }
+  .guideStep.done .dot { background: var(--success-600); border-color: var(--success-600); color: #fff; }
+  .guideStep.done { color: var(--muted); }
+
+  /* --- Footer --------------------------------------------------------- */
+
+  footer {
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+  }
+  .footInner {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 22px 30px;
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .footInner h3 { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--foreground); }
+  .footInner ul { margin: 6px 0 0; padding-left: 18px; }
+  .footInner li { margin-bottom: 3px; }
+  a { color: var(--brand-500); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .fade { animation: fade 240ms ease-out; }
+    @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+
+<div class="disclosure">
+  <div class="disclosureInner">
+    <strong>Walkthrough, not the live system.</strong>
+    <span>No server, no database, and <em>no model</em>. The agent here is the product's own
+    deterministic mock — its keyword rules and its one reply template, ported to this page — so
+    what you get is what the shipped system produces today, including a reply that is a template
+    rather than a piece of writing. A real model has never been run against it.</span>
+    <a href="https://github.com/abram0102/OpsPilot-AI-Native-Workflow-Automation-Platform" target="_blank" rel="noopener">Source and evidence →</a>
+  </div>
+</div>
+
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="brand"><span class="mark">A</span> OpsPilot</div>
+    <button class="navItem" data-nav="dashboard" type="button">Dashboard</button>
+    <button class="navItem" data-nav="tickets" type="button">Tickets</button>
+    <button class="navItem" data-nav="knowledge" type="button">Knowledge</button>
+    <button class="navItem" data-nav="runs" type="button">Runs</button>
+    <button class="navItem" data-nav="approvals" type="button">Approvals</button>
+    <div class="railFoot"><p>Signed in as the Acme owner. Switch tenant above the page to test isolation.</p></div>
+  </nav>
+
+  <main class="canvas" id="canvas"></main>
+</div>
+
+<div class="guide" id="guide"></div>
+
+<footer>
+  <div class="footInner">
+    <div>
+      <h3>What this is</h3>
+      <p>A click-through of OpsPilot: an AI agent reads a support ticket, retrieves that company's own knowledge, drafts a cited reply — and cannot publish it. A human approves the exact text, or nothing goes out.</p>
+    </div>
+    <div>
+      <h3>What's real, with evidence</h3>
+      <ul>
+        <li>Ticket list p95 149.93 ms → 36.91 ms, throughput 1,264 → 4,646 req/s</li>
+        <li>60 fictional eval cases: 0 forbidden actions executed, 100% approval recall</li>
+        <li>Worker killed mid-action with SIGKILL: exactly one published reply</li>
+        <li>265 Java, 355 Python, 54 web, 11 end-to-end tests</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What isn't</h3>
+      <ul>
+        <li>Nothing is deployed — there is no live instance of the real stack</li>
+        <li>No real model has ever been called; the agent runs on a deterministic mock</li>
+        <li>This page simulates the backend entirely in your browser</li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+
+  const ACME = "acme", GLOBEX = "globex";
+
+  const ORGS = {
+    [ACME]: { name: "Acme Demo", id: "75dcbba6-d2ea-43c9-b0d7-731300e8d2e6" },
+    [GLOBEX]: { name: "Globex Demo", id: "c4e1f0a2-9b77-4d31-8f05-2a6b1c7e4d90" },
+  };
+
+  // --- The agent, as the real system actually runs it in AI_MODE=mock -------------------
+  //
+  // These are not invented for the demo. They are ported line-for-line from
+  // services/agent/src/opspilot_agent/providers/{seed_cases,mock,tokens}.py, because a demo
+  // that produces nicer output than the product is a lie about the product. The real mock is
+  // keyword rules and one reply template; that is what you see here.
+
+  const CATEGORY_RULES = [
+    { category: "SHIPPING", keywords: ["shipping", "shipment", "delivery", "deliver", "tracking", "parcel", "package", "courier"] },
+    { category: "BILLING", keywords: ["billing", "invoice", "refund", "charge", "charged", "payment", "price", "subscription"] },
+    { category: "ACCOUNT", keywords: ["account", "login", "log in", "sign in", "password", "locked out", "two-factor", "email"] },
+  ];
+  const HIGH_URGENCY = ["urgent", "asap", "immediately", "emergency", "outage", "cannot access", "lost", "fraud", "unauthorized"];
+  const LOW_URGENCY = ["question", "wondering", "curious", "whenever", "no rush", "just checking"];
+
+  function classifyCategory(text) {
+    const lowered = text.toLowerCase();
+    let best = "OTHER", hits = 0;
+    for (const rule of CATEGORY_RULES) {
+      const n = rule.keywords.filter((k) => lowered.includes(k)).length;
+      if (n > hits) { best = rule.category; hits = n; }
+    }
+    return { category: best, hits };
+  }
+
+  function classifyUrgency(text) {
+    const lowered = text.toLowerCase();
+    if (HIGH_URGENCY.some((k) => lowered.includes(k))) return "HIGH";
+    if (LOW_URGENCY.some((k) => lowered.includes(k))) return "LOW";
+    return "MEDIUM";
+  }
+
+  // min(0.5 + 0.15 * hits, 0.95), or 0.25 with no supporting keyword at all — "a rule this
+  // crude should never claim certainty", as the comment in mock.py puts it.
+  const confidenceFor = (hits) => hits ? Math.round(Math.min(0.5 + 0.15 * hits, 0.95) * 100) / 100 : 0.25;
+
+  // The entire reply the shipped product generates in mock mode. One template, one substitution.
+  const draftFor = (category) =>
+    "Thanks for getting in touch about your " + category.toLowerCase() + " issue. " +
+    "A support agent is reviewing the details and will follow up shortly.";
+
+  const estimateTokens = (text) => (text ? Math.ceil(text.length / 4) : 0);
+
+  // The two versioned system prompts, measured rather than guessed:
+  // prompts/classification.v1.md is 1,011 characters and prompts/reply_draft.v1.md is 1,015,
+  // which the estimator above turns into 253 and 254 tokens. The real graph counts the whole
+  // prompt, so leaving them out would under-report; inventing a round number would be worse.
+  const CLASSIFY_PROMPT_TOKENS = 253;
+  const DRAFT_PROMPT_TOKENS = 254;
+
+  const state = {
+    org: ACME,
+    view: { name: "dashboard" },
+    seq: 3,
+    tickets: [
+      { id: "6210f650", org: ACME, subject: "Where is my order? It has not moved in six days",
+        body: "My parcel has not arrived and the tracking has not updated since Tuesday.",
+        customer: "Dana Whitfield", status: "OPEN", priority: "MEDIUM", messages: [], runId: null },
+      { id: "9f1c04ab", org: ACME, subject: "Charged twice for the same subscription",
+        body: "I was billed on the 3rd and again on the 4th for the same plan.",
+        customer: "Theo Marsh", status: "OPEN", priority: "HIGH", messages: [], runId: null },
+      { id: "41d7b9e2", org: ACME, subject: "How do I add a teammate?",
+        body: "I want my colleague to see our tickets.", customer: "Priya Raman",
+        status: "PENDING", priority: "LOW", messages: [], runId: null },
+      { id: "b8e32d10", org: GLOBEX, subject: "Invoice address is wrong on our receipts",
+        body: "Our billing address changed last quarter.", customer: "Globex Facilities",
+        status: "OPEN", priority: "MEDIUM", messages: [], runId: null },
+    ],
+    docs: [
+      { org: ACME, name: "acme-shipping-policy.md", type: "text/markdown", size: "1.2 KiB", status: "READY" },
+      { org: ACME, name: "acme-refunds-faq.md", type: "text/markdown", size: "0.8 KiB", status: "READY" },
+      { org: GLOBEX, name: "globex-invoicing.md", type: "text/markdown", size: "2.1 KiB", status: "READY" },
+    ],
+    runs: [],
+    approvals: [],
+    // Which guided steps the visitor has completed.
+    done: new Set(),
+    // Set when the visitor tries to reach Acme data while signed in as Globex.
+    blockedPeek: null,
+  };
+
+  const GUIDE = [
+    { key: "open", label: "Open a ticket" },
+    { key: "run", label: "Ask the agent" },
+    { key: "trace", label: "Read the trace" },
+    { key: "approve", label: "Approve the reply" },
+    { key: "twice", label: "Try approving twice" },
+    { key: "tenant", label: "Switch tenant, open Acme" },
+  ];
+
+  const el = (tag, props = {}, kids = []) => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;
+      else if (k === "html") node.innerHTML = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else if (v !== null && v !== undefined) node.setAttribute(k, v);
+    }
+    for (const kid of [].concat(kids)) if (kid) node.append(kid);
+    return node;
+  };
+
+  const orgTickets = () => state.tickets.filter((t) => t.org === state.org);
+  const orgDocs = () => state.docs.filter((d) => d.org === state.org);
+  const orgRuns = () => state.runs.filter((r) => r.org === state.org);
+  const orgApprovals = () => state.approvals.filter((a) => a.org === state.org);
+  const ticketById = (id) => state.tickets.find((t) => t.id === id);
+  const runById = (id) => state.runs.find((r) => r.id === id);
+
+  function complete(key) {
+    if (!state.done.has(key)) { state.done.add(key); }
+  }
+
+  function go(view) {
+    state.view = view;
+    state.blockedPeek = null;
+    render();
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+  }
+
+  // --- Views -----------------------------------------------------------
+
+  function topbar() {
+    const select = el("select", { id: "tenant-select", "aria-label": "Signed-in tenant" });
+    for (const [key, org] of Object.entries(ORGS)) {
+      const opt = el("option", { value: key, text: org.name });
+      if (key === state.org) opt.selected = true;
+      select.append(opt);
+    }
+    select.addEventListener("change", (e) => {
+      state.org = e.target.value;
+      if (state.org === GLOBEX) complete("tenant");
+      go({ name: state.view.name === "ticket" || state.view.name === "run" || state.view.name === "approval"
+        ? "tickets" : state.view.name });
+    });
+
+    const peek = el("button", {
+      class: "btn secondary small", type: "button",
+      text: "Open an Acme ticket URL",
+      onclick: () => {
+        complete("tenant");
+        state.blockedPeek = "6210f650";
+        render();
+      },
+    });
+
+    return el("div", { class: "topbar" }, [
+      el("div", { class: "tenant" }, [el("span", { text: "Tenant" }), select]),
+      state.org === GLOBEX ? peek : el("span", { class: "mono", text: "owner@acme.demo · OWNER" }),
+    ]);
+  }
+
+  function dashboard() {
+    const mine = orgTickets();
+    const open = mine.filter((t) => t.status === "OPEN").length;
+    const pending = orgApprovals().filter((a) => a.status === "PENDING").length;
+    const published = mine.reduce((n, t) => n + t.messages.length, 0);
+
+    const tiles = el("div", { class: "grid tiles" }, [
+      tile(String(mine.length), "Tickets"),
+      tile(String(open), "Open"),
+      tile(String(orgRuns().length), "Agent runs"),
+      tile(String(pending), "Awaiting approval"),
+      tile(String(published), "Published by agent"),
+    ]);
+
+    return [
+      el("h1", { class: "pageTitle", text: "Dashboard" }),
+      el("p", { class: "lead", text:
+        "Counts for " + ORGS[state.org].name + " only. Every figure on this page is scoped to the " +
+        "tenant you are signed in as — in the real system that scoping is a SQL predicate and a " +
+        "composite foreign key, not a filter applied in the browser." }),
+      tiles,
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "Start here" })]),
+        el("p", { class: "lead", text:
+          "Open the shipping ticket, ask the agent to look at it, then decide whether to publish " +
+          "what it drafts. The strip at the bottom tracks where you are." }),
+        el("div", { class: "row", style: "margin-top:12px" }, [
+          el("button", { class: "btn", type: "button", text: "Open the shipping ticket",
+            onclick: () => { complete("open"); go({ name: "ticket", id: mine[0] ? mine[0].id : null }); } }),
+        ]),
+      ]),
+    ];
+  }
+
+  function tile(num, lab) {
+    return el("div", { class: "card tile" }, [
+      el("div", { class: "lab", text: lab }),
+      el("div", { class: "num", text: num }),
+    ]);
+  }
+
+  function ticketList() {
+    const rows = orgTickets().map((t) =>
+      el("tr", { onclick: () => { complete("open"); go({ name: "ticket", id: t.id }); } }, [
+        el("td", {}, [
+          el("div", { text: t.subject, style: "font-weight:500" }),
+          el("div", { class: "mono", text: t.id + " · " + t.customer }),
+        ]),
+        el("td", {}, [el("span", { class: "badge " + (t.status === "OPEN" ? "brand" : ""), text: t.status })]),
+        el("td", {}, [el("span", { class: "badge", text: t.priority })]),
+        el("td", {}, [el("span", {
+          class: "badge " + (t.messages.length ? "ok" : ""),
+          text: t.messages.length ? t.messages.length + " agent reply" : "—",
+        })]),
+      ]));
+
+    return [
+      el("h1", { class: "pageTitle", text: "Tickets" }),
+      el("p", { class: "lead", text: "Keyset-paginated and filterable in the real app. Click a row." }),
+      el("div", { class: "card", style: "padding:0;overflow:hidden" }, [
+        el("div", { class: "tableWrap" }, [
+          el("table", {}, [
+            el("thead", {}, [el("tr", {}, [
+              el("th", { text: "Ticket" }), el("th", { text: "Status" }),
+              el("th", { text: "Priority" }), el("th", { text: "Agent" }),
+            ])]),
+            el("tbody", {}, rows),
+          ]),
+        ]),
+      ]),
+    ];
+  }
+
+  function knowledge() {
+    const rows = orgDocs().map((d) =>
+      el("tr", {}, [
+        el("td", { text: d.name }),
+        el("td", { class: "mono", text: d.type }),
+        el("td", { class: "mono", text: d.size }),
+        el("td", {}, [el("span", { class: "badge ok", text: d.status })]),
+      ]));
+
+    return [
+      el("h1", { class: "pageTitle", text: "Knowledge" }),
+      el("p", { class: "lead", text:
+        "Uploaded documents are extracted, chunked and embedded by the worker, then retrieved " +
+        "only within the tenant that owns them. READY means the whole path finished — in the " +
+        "real system that path crosses two services, and getting it wrong is how it stayed " +
+        "broken for weeks." }),
+      el("div", { class: "card", style: "padding:0;overflow:hidden" }, [
+        el("div", { class: "tableWrap" }, [
+          el("table", {}, [
+            el("thead", {}, [el("tr", {}, [
+              el("th", { text: "Document" }), el("th", { text: "Type" }),
+              el("th", { text: "Size" }), el("th", { text: "Status" }),
+            ])]),
+            el("tbody", {}, rows),
+          ]),
+        ]),
+      ]),
+    ];
+  }
+
+  function ticketView(id) {
+    const t = ticketById(id);
+    if (!t || t.org !== state.org) return noAccess();
+
+    const run = t.runId ? runById(t.runId) : null;
+    const messages = t.messages.map((m) =>
+      el("div", { class: "msg" }, [
+        el("div", { class: "msgWho", text: "Agent" }),
+        el("p", { text: m }),
+      ]));
+
+    const askBtn = el("button", {
+      class: "btn", type: "button",
+      text: run ? "Agent run in progress" : "Ask the agent",
+      onclick: () => startRun(t),
+    });
+    if (run) askBtn.disabled = true;
+
+    return [
+      el("button", { class: "btn secondary small", type: "button", text: "← Back to tickets",
+        onclick: () => go({ name: "tickets" }) }),
+      el("h1", { class: "pageTitle", text: t.subject }),
+      el("div", { class: "row" }, [
+        el("span", { class: "badge brand", text: t.status }),
+        el("span", { class: "badge", text: t.priority }),
+        el("span", { class: "mono", text: t.id + " · " + t.customer }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "Original request" })]),
+        el("p", { text: t.body }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [
+          el("h2", { class: "cardTitle", text: "Conversation" }),
+          el("span", { class: "badge", text: t.messages.length + " message" + (t.messages.length === 1 ? "" : "s") }),
+        ]),
+        messages.length
+          ? el("div", { class: "grid" }, messages)
+          : el("p", { class: "lead", text: "Nothing has been published on this ticket yet." }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "Agent" })]),
+        el("p", { class: "lead", text: run
+          ? "A run exists for this ticket."
+          : "Starting a run returns immediately with a run id. The work happens on a separate "
+            + "worker; the page polls for state." }),
+        el("div", { class: "row", style: "margin-top:12px" }, [
+          askBtn,
+          run ? el("button", { class: "btn secondary", type: "button", text: "Open the run",
+            onclick: () => go({ name: "run", id: run.id }) }) : null,
+        ]),
+      ]),
+    ];
+  }
+
+  // --- The run -----------------------------------------------------------
+
+  // Builds this ticket's trace by running the rules above over its own text, so the three
+  // tickets genuinely diverge instead of sharing one canned answer.
+  function planRun(t) {
+    const text = t.subject + " " + t.body;
+    const { category, hits } = classifyCategory(text);
+    const urgency = classifyUrgency(text);
+    const confidence = confidenceFor(hits);
+    const body = draftFor(category);
+
+    // Retrieval returns this tenant's READY chunks, up to RETRIEVAL_LIMIT (4). With the mock
+    // embedding provider the ordering is not semantic — see the note the run page shows.
+    const evidence = state.docs
+      .filter((d) => d.org === t.org && d.status === "READY")
+      .slice(0, 4)
+      .map((d, i) => ({ doc: d.name, chunk: 0, score: Number((0.31 - i * 0.02).toFixed(4)) }));
+
+    const cited = evidence.map((e) => e.doc + "#" + e.chunk).join(", ") || "(none)";
+
+    const steps = [
+      { name: "CLASSIFY", out: "category " + category + " · urgency " + urgency +
+          " · confidence " + confidence.toFixed(2) + " (" + hits + " keyword " +
+          (hits === 1 ? "hit" : "hits") + ")",
+        inTok: estimateTokens(text) + CLASSIFY_PROMPT_TOKENS, outTok: estimateTokens(text) },
+      { name: "RETRIEVE", out: evidence.length
+          ? evidence.length + " chunk" + (evidence.length === 1 ? "" : "s") + " for this tenant: " + cited
+          : "no READY documents for this tenant",
+        inTok: 0, outTok: 0 },
+      { name: "DRAFT REPLY", out: "drafted " + body.split(" ").length + " words; citable: " + cited,
+        inTok: estimateTokens(body) + DRAFT_PROMPT_TOKENS, outTok: estimateTokens(body) },
+      { name: "PROPOSE TOOL", out: "ADD_INTERNAL_TAG {\"tag\":\"" + category.toLowerCase() +
+          "\"} — on the allowlist, no approval needed", inTok: 40, outTok: 12 },
+      { name: "PROPOSE TOOL", out: "PUBLISH_INTERNAL_REPLY — requires approval",
+        inTok: 24, outTok: 14 },
+      { name: "AWAIT APPROVAL", out: "run parked; nothing further is permitted without a human",
+        inTok: 0, outTok: 0 },
+    ];
+
+    return { category, urgency, confidence, body, evidence, steps };
+  }
+
+  function startRun(t) {
+    complete("run");
+    const plan = planRun(t);
+    const run = {
+      id: "r" + (state.seq++) + "f2ae6f3",
+      org: t.org, ticketId: t.id,
+      status: "QUEUED", steps: [], tokensIn: 0, tokensOut: 0,
+      category: plan.category, urgency: plan.urgency, confidence: plan.confidence,
+      started: new Date(),
+    };
+    state.runs.push(run);
+    t.runId = run.id;
+    go({ name: "run", id: run.id });
+
+    const tick = (i) => {
+      const current = runById(run.id);
+      if (!current) return;
+      if (i === 0) current.status = "RUNNING";
+      if (i < plan.steps.length) {
+        const step = plan.steps[i];
+        current.steps.push(step);
+        current.tokensIn += step.inTok;
+        current.tokensOut += step.outTok;
+        if (state.view.name === "run" && state.view.id === run.id) render();
+        setTimeout(() => tick(i + 1), i === 1 ? 900 : 620);
+      } else {
+        current.status = "AWAITING_APPROVAL";
+        const approval = {
+          id: "ap" + (state.seq++), org: run.org, runId: run.id, ticketId: run.ticketId,
+          status: "PENDING", body: plan.body, category: plan.category,
+          evidence: plan.evidence, applied: false,
+        };
+        state.approvals.push(approval);
+        if (state.view.name === "run" && state.view.id === run.id) { complete("trace"); render(); }
+      }
+    };
+    setTimeout(() => tick(0), 500);
+  }
+
+  function runView(id) {
+    const run = runById(id);
+    if (!run || run.org !== state.org) return noAccess();
+    const approval = state.approvals.find((a) => a.runId === run.id);
+    const badgeClass = run.status === "COMPLETED" ? "ok" : run.status === "AWAITING_APPROVAL" ? "warn" : "brand";
+
+    const steps = run.steps.map((s, i) =>
+      el("div", { class: "step fade" }, [
+        el("span", { class: "stepNo", text: String(i) }),
+        el("div", { style: "min-width:0" }, [
+          el("div", { class: "stepName", text: s.name }),
+          el("div", { class: "mono", text: s.out }),
+        ]),
+        el("span", { class: "badge ok", text: "ok" }),
+      ]));
+
+    const approvalCard = approval ? el("div", { class: "card" }, [
+      el("div", { class: "cardHead" }, [
+        el("h2", { class: "cardTitle", text: "Approvals" }),
+        el("span", { class: "badge " + (approval.status === "PENDING" ? "warn" : approval.status === "APPROVED" ? "ok" : "bad"),
+          text: approval.status }),
+      ]),
+      el("blockquote", { class: "proposal" }, [el("p", { text: approval.body })]),
+      el("p", { class: "mono", style: "margin-top:8px",
+        text: approval.evidence.length
+          ? "Cites " + approval.evidence.length + " source" + (approval.evidence.length === 1 ? "" : "s") +
+            ": " + approval.evidence.map((e) => e.doc).join(", ")
+          : "No sources were cited." }),
+      approval.status === "PENDING"
+        ? el("div", { class: "row", style: "margin-top:12px" }, [
+            el("button", { class: "btn", type: "button", text: "Review and decide →",
+              onclick: () => go({ name: "approval", id: approval.id }) }),
+          ])
+        : null,
+    ]) : null;
+
+    return [
+      el("button", { class: "btn secondary small", type: "button", text: "← Back to the ticket",
+        onclick: () => go({ name: "ticket", id: run.ticketId }) }),
+      el("h1", { class: "pageTitle", text: "Run " + run.id.slice(0, 8) }),
+      el("div", { class: "row" }, [
+        el("span", { class: "badge " + badgeClass, text: run.status.replace(/_/g, " ") }),
+        el("span", { class: "badge", text: "SUPPORT TRIAGE V1" }),
+        run.status === "RUNNING" ? el("span", { class: "mono", text: "watching for updates…" }) : null,
+      ]),
+      el("div", { class: "card" }, [
+        el("dl", { class: "kv" }, [
+          el("div", {}, [el("dt", { text: "Ticket" }), el("dd", { class: "mono", text: run.ticketId })]),
+          el("div", {}, [el("dt", { text: "Steps used" }), el("dd", { text: String(run.steps.length) })]),
+          el("div", {}, [el("dt", { text: "Attempts" }), el("dd", { text: "0" })]),
+          el("div", {}, [el("dt", { text: "Tokens in / out (est.)" }),
+            el("dd", { text: run.tokensIn + " / " + run.tokensOut })]),
+        ]),
+      ]),
+      approvalCard,
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [
+          el("h2", { class: "cardTitle", text: "Trace" }),
+          el("span", { class: "badge", text: String(run.steps.length) }),
+        ]),
+        run.steps.length
+          ? el("div", { class: "grid" }, steps)
+          : el("p", { class: "lead", text: "Queued. The API wrote a row and an outbox event and returned; nothing has been computed yet." }),
+      ]),
+      run.status === "AWAITING_APPROVAL"
+        ? el("div", { class: "notice warn", text:
+            "The run stopped at AWAITING APPROVAL, not COMPLETED. The graph has run out of things " +
+            "it is allowed to do by itself." })
+        : null,
+      run.category
+        ? el("div", { class: "notice", text:
+            "What produced this: keyword rules, not a model. " + run.category + " won on keyword " +
+            "matches, confidence is 0.5 + 0.15 per match capped at 0.95, and the reply is one " +
+            "template with the category substituted in. That is the whole of AI_MODE=mock, and it " +
+            "is what every test, screenshot and evaluation in this project measures. The point " +
+            "being demonstrated is the machinery around the agent — the approval gate, the " +
+            "citations, the trace, the tenant boundary — not the quality of the prose." })
+        : null,
+    ];
+  }
+
+  function approvalView(id) {
+    const a = state.approvals.find((x) => x.id === id);
+    if (!a || a.org !== state.org) return noAccess();
+    const t = ticketById(a.ticketId);
+
+    const decide = (outcome) => {
+      if (a.status !== "PENDING") {
+        complete("twice");
+        render();
+        return;
+      }
+      a.status = outcome;
+      const run = runById(a.runId);
+      if (outcome === "APPROVED") {
+        a.applied = true;
+        t.messages.push(a.body);
+        complete("approve");
+      }
+      if (run) run.status = "COMPLETED";
+      render();
+    };
+
+    const alreadyDecided = a.status !== "PENDING";
+
+    return [
+      el("button", { class: "btn secondary small", type: "button", text: "← Back to the run",
+        onclick: () => go({ name: "run", id: a.runId }) }),
+      el("h1", { class: "pageTitle", text: "Proposed reply" }),
+      el("div", { class: "row" }, [
+        el("span", { class: "badge " + (a.status === "PENDING" ? "warn" : a.status === "APPROVED" ? "ok" : "bad"), text: a.status }),
+        el("span", { class: "badge", text: "PUBLISH INTERNAL REPLY" }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "Exact text to be published" })]),
+        el("blockquote", { class: "proposal" }, [el("p", { text: a.body })]),
+        el("p", { class: "mono", style: "margin-top:8px", text:
+          "This is the text that will be posted, character for character. It cannot be edited here." }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [
+          el("h2", { class: "cardTitle", text: "Evidence" }),
+          el("span", { class: "badge", text: String(a.evidence.length) }),
+        ]),
+        el("div", { class: "grid" }, a.evidence.map((e) =>
+          el("div", { class: "evidence" }, [
+            el("span", { text: e.doc }),
+            el("code", { text: "excerpt " + e.chunk + " · score " + e.score }),
+          ]))),
+        el("div", { class: "notice warn", style: "margin-top:12px", text:
+          "These are the chunks retrieval returned for this tenant, and the reviewer is shown " +
+          "them before deciding. Be careful what you read into the ranking: in mock mode the " +
+          "embeddings are SHA-256 hashes, so similar text does not get similar vectors and the " +
+          "order carries no meaning. Making citations semantically right needs a real embedding " +
+          "model, which this project has never run." }),
+      ]),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "Decision" })]),
+        el("p", { class: "lead", text: alreadyDecided
+          ? "This approval has already been decided. Deciding it again is where idempotency earns its keep."
+          : "Approving publishes this exact text. Rejecting records the decision and the agent publishes nothing." }),
+        el("div", { class: "row", style: "margin-top:12px" }, [
+          el("button", { class: "btn", type: "button", text: "Approve and publish",
+            onclick: () => decide("APPROVED") }),
+          el("button", { class: "btn danger", type: "button", text: "Reject",
+            onclick: () => decide("REJECTED") }),
+        ]),
+        alreadyDecided && state.done.has("twice")
+          ? el("div", { class: "notice ok", style: "margin-top:12px", text:
+              "Nothing happened, and that is the point. The effect is keyed by (run_id, tool_call_id), " +
+              "so a second approval returns alreadyApplied and publishes nothing. In the real system " +
+              "ten concurrent duplicates are fired at this path in a test, and exactly one row lands." })
+          : null,
+        a.status === "APPROVED"
+          ? el("div", { class: "notice ok", style: "margin-top:12px" }, [
+              el("p", { text: "Published. Open the ticket: there is exactly one agent message, and its text is the text you just read." }),
+              el("div", { class: "row", style: "margin-top:10px" }, [
+                el("button", { class: "btn secondary small", type: "button", text: "Open the ticket",
+                  onclick: () => go({ name: "ticket", id: a.ticketId }) }),
+                el("button", { class: "btn secondary small", type: "button", text: "Try approving again",
+                  onclick: () => { complete("twice"); render(); } }),
+              ]),
+            ])
+          : null,
+        a.status === "REJECTED"
+          ? el("div", { class: "notice bad", style: "margin-top:12px", text:
+              "Rejected. The run is finished and the ticket has no agent message. A rejected approval " +
+              "can never be executed, including by a replayed queue message." })
+          : null,
+      ]),
+    ];
+  }
+
+  function approvalList() {
+    const mine = orgApprovals();
+    if (!mine.length) {
+      return [
+        el("h1", { class: "pageTitle", text: "Approvals" }),
+        el("div", { class: "notice", text: "Nothing is waiting. Ask the agent to look at a ticket and one will appear here." }),
+      ];
+    }
+    return [
+      el("h1", { class: "pageTitle", text: "Approvals" }),
+      el("div", { class: "grid" }, mine.map((a) =>
+        el("div", { class: "card" }, [
+          el("div", { class: "cardHead" }, [
+            el("span", { class: "badge " + (a.status === "PENDING" ? "warn" : a.status === "APPROVED" ? "ok" : "bad"), text: a.status }),
+            el("span", { class: "badge", text: "PUBLISH INTERNAL REPLY" }),
+          ]),
+          el("blockquote", { class: "proposal" }, [el("p", { text: a.body })]),
+          el("div", { class: "row", style: "margin-top:12px" }, [
+            el("button", { class: "btn secondary small", type: "button", text: "Open", onclick: () => go({ name: "approval", id: a.id }) }),
+          ]),
+        ]))),
+    ];
+  }
+
+  function runList() {
+    const mine = orgRuns();
+    if (!mine.length) {
+      return [
+        el("h1", { class: "pageTitle", text: "Runs" }),
+        el("div", { class: "notice", text: "No runs yet for this tenant." }),
+      ];
+    }
+    return [
+      el("h1", { class: "pageTitle", text: "Runs" }),
+      el("div", { class: "grid" }, mine.map((r) =>
+        el("div", { class: "card" }, [
+          el("div", { class: "cardHead" }, [
+            el("h2", { class: "cardTitle", text: "Run " + r.id.slice(0, 8) }),
+            el("span", { class: "badge " + (r.status === "COMPLETED" ? "ok" : "warn"), text: r.status.replace(/_/g, " ") }),
+          ]),
+          el("p", { class: "mono", text: "ticket " + r.ticketId + " · " + r.steps.length + " steps" }),
+          el("div", { class: "row", style: "margin-top:12px" }, [
+            el("button", { class: "btn secondary small", type: "button", text: "Open",
+              onclick: () => go({ name: "run", id: r.id }) }),
+          ]),
+        ]))),
+    ];
+  }
+
+  function noAccess() {
+    return [
+      el("h1", { class: "pageTitle", text: "No access" }),
+      el("div", { class: "notice bad", text:
+        "You are signed in to " + ORGS[state.org].name + ". This resource belongs to another " +
+        "organization, so it is not yours to read." }),
+      el("div", { class: "card" }, [
+        el("div", { class: "cardHead" }, [el("h2", { class: "cardTitle", text: "What just happened" })]),
+        el("p", { class: "lead", text:
+          "The URL was valid and the session was valid. The server resolved your membership from " +
+          "the database and refused — it never trusts an organization id supplied by the client. " +
+          "The same refusal covers the run, the approval and the document, and the vector search " +
+          "is scoped the same way, so the agent cannot reach another tenant's knowledge either." }),
+        el("p", { class: "mono", style: "margin-top:10px", text:
+          "Tested by SecurityRegressionSweepIntegrationTest, which enumerates every mapped route, and by four Playwright isolation tests." }),
+      ]),
+    ];
+  }
+
+  // --- Chrome ------------------------------------------------------------
+
+  function renderGuide() {
+    const guide = document.getElementById("guide");
+    guide.textContent = "";
+    const firstUndone = GUIDE.find((s) => !state.done.has(s.key));
+    for (const step of GUIDE) {
+      const done = state.done.has(step.key);
+      const now = !done && firstUndone && firstUndone.key === step.key;
+      guide.append(el("div", { class: "guideStep" + (done ? " done" : now ? " now" : "") }, [
+        el("span", { class: "dot", text: done ? "✓" : String(GUIDE.indexOf(step) + 1) }),
+        el("span", { text: step.label }),
+      ]));
+    }
+    if (!firstUndone) {
+      guide.append(el("div", { class: "guideStep done" }, [
+        el("span", { class: "dot", text: "✓" }),
+        el("span", { text: "That's the whole loop — thanks for clicking through." }),
+      ]));
+    }
+  }
+
+  function render() {
+    const canvas = document.getElementById("canvas");
+    canvas.textContent = "";
+    canvas.append(topbar());
+
+    let body;
+    if (state.blockedPeek) body = noAccess();
+    else switch (state.view.name) {
+      case "tickets": body = ticketList(); break;
+      case "knowledge": body = knowledge(); break;
+      case "runs": body = runList(); break;
+      case "approvals": body = approvalList(); break;
+      case "ticket": body = ticketView(state.view.id); break;
+      case "run": body = runView(state.view.id); break;
+      case "approval": body = approvalView(state.view.id); break;
+      default: body = dashboard();
+    }
+    for (const node of body) if (node) canvas.append(node);
+
+    const navFor = { ticket: "tickets", run: "runs", approval: "approvals" };
+    const current = state.blockedPeek ? null : (navFor[state.view.name] || state.view.name);
+    for (const btn of document.querySelectorAll("[data-nav]")) {
+      btn.setAttribute("aria-current", btn.dataset.nav === current ? "true" : "false");
+    }
+    renderGuide();
+  }
+
+  for (const btn of document.querySelectorAll("[data-nav]")) {
+    btn.addEventListener("click", () => go({ name: btn.dataset.nav }));
+  }
+
+  render();
+})();
+</script>
