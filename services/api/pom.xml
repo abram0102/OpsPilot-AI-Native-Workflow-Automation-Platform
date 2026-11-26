@@ -85,7 +85,7 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>3.2.0</version>
+			<version>3.2.1</version>
 		</dependency>
 		<!-- S3StorageService (T13) — private bucket, signed PUT URL; only active when
 		     storage.provider=s3. Untestable in this environment (Gate H3: no AWS
